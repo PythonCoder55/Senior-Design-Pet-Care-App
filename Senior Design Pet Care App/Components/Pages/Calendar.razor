@@ -1,0 +1,88 @@
+﻿@page "/calendar"
+@using System.Globalization
+@using Microsoft.AspNetCore.Authorization
+
+@* You have to be logged in to view this page. *@
+@attribute [Authorize]
+
+<h3>Calendar</h3>
+
+<div class="calendar-container">
+    <div class="calendar-header">
+        <button class="btn btn-sm btn-secondary" @onclick="PreviousMonth">←</button>
+        <span>@CurrentMonth.ToString("MMMM yyyy")</span>
+        <button class="btn btn-sm btn-secondary" @onclick="NextMonth">→</button>
+    </div>
+
+    <div class="calendar-grid">
+        @foreach (var dayName in DayNames)
+        {
+            <div class="calendar-day-header">@dayName</div>
+        }
+
+        @for (int i = 0; i < FirstDayOffset; i++)
+        {
+            <div class="calendar-day empty"></div>
+        }
+
+        @for (int day = 1; day <= DaysInMonth; day++)
+        {
+            var date = new DateTime(CurrentMonth.Year, CurrentMonth.Month, day);
+            <div class="calendar-day" @onclick="() => SelectDay(date)">
+                <div class="date-number">@day</div>
+                @if (Events.TryGetValue(date.Date, out var eventList))
+                {
+                    foreach (var e in eventList)
+                    {
+                        <div class="event">@e</div>
+                    }
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@if (SelectedDay.HasValue)
+{
+    <div class="event-dialog">
+        <h4>Add Event - @SelectedDay.Value.ToString("D")</h4>
+        <input @bind="NewEventText" placeholder="Event description" class="form-control" />
+        <button class="btn btn-primary mt-2" @onclick="AddEvent">Add</button>
+        <button class="btn btn-secondary mt-2" @onclick="() => SelectedDay = null">Close</button>
+    </div>
+}
+
+@code {
+    private DateTime CurrentMonth = DateTime.Today;
+    private Dictionary<DateTime, List<string>> Events = new();
+    private DateTime? SelectedDay;
+    private string? NewEventText;
+
+    private string[] DayNames = CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames;
+
+    private int DaysInMonth => DateTime.DaysInMonth(CurrentMonth.Year, CurrentMonth.Month);
+    private int FirstDayOffset => (int)new DateTime(CurrentMonth.Year, CurrentMonth.Month, 1).DayOfWeek;
+
+    private void PreviousMonth() => CurrentMonth = CurrentMonth.AddMonths(-1);
+    private void NextMonth() => CurrentMonth = CurrentMonth.AddMonths(1);
+
+    private void SelectDay(DateTime date)
+    {
+        SelectedDay = date;
+        NewEventText = string.Empty;
+    }
+
+    private void AddEvent()
+    {
+        if (SelectedDay.HasValue && !string.IsNullOrWhiteSpace(NewEventText))
+        {
+            if (!Events.ContainsKey(SelectedDay.Value.Date))
+            {
+                Events[SelectedDay.Value.Date] = new List<string>();
+            }
+
+            Events[SelectedDay.Value.Date].Add(NewEventText);
+            NewEventText = string.Empty;
+        }
+    }
+}

@@ -92,7 +92,7 @@ namespace Senior_Design_Pet_Care_App.Components.Pages
                 }
                 else
                 {
-                    NavigationManager.NavigateTo("/auth");
+                    NavigationManager.NavigateTo("/");
                 }
             }
         }
