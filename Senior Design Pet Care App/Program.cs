@@ -29,8 +29,8 @@ builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthStateProvider>
 builder.Services.AddCascadingAuthenticationState();
 
 // Add EF Core SQLite
-var conn = builder.Configuration.GetConnectionString("AuthDb") ?? "Data Source=auth.db";
-builder.Services.AddDbContext<AuthDbContext>(options =>
+var conn = builder.Configuration.GetConnectionString("PetCareDb") ?? "Data Source=PetCare.db";
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite(conn));
 
 // Register AuthDataService (now async)
@@ -44,7 +44,7 @@ var app = builder.Build();
 // Ensure database created (simple approach, you can use migrations instead)
 using (var scope = app.Services.CreateScope())
 {
-    var ctx = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+    var ctx = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     ctx.Database.EnsureCreated();
 
     // Optional: seed admin/super accounts if missing (only for initial run)
