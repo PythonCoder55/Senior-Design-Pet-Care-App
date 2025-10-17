@@ -1,4 +1,10 @@
 @page "/tips"
+@using System.Globalization
+@using Microsoft.AspNetCore.Authorization
+
+@* You have to be logged in to view this page. *@
+@attribute [Authorize]
+<PageTitle>Pet Care Tips & Tricks</PageTitle>
 
 <h3>Pet Care Tips & Tricks</h3>
 
