@@ -1,15 +1,11 @@
 @page "/tips"
-@using System.Globalization
-@using Microsoft.AspNetCore.Authorization
-
-@* You have to be logged in to view this page. *@
 @attribute [Authorize]
 <PageTitle>Pet Care Tips & Tricks</PageTitle>
 
 <h3>Pet Care Tips & Tricks</h3>
 
 <div class="container mt-4">
-    @foreach (var tip in Tips)
+    @foreach (var tip in PetTips)
     {
         <div class="card mb-3 shadow-sm">
             <div class="card-body">
@@ -21,7 +17,7 @@
 </div>
 
 @code {
-    private List<(string Title, string Description)> tips = new()
+    private List<(string Title, string Description)> PetTips = new()
     {
         ("Hydration", "Always keep fresh water available. Dehydration happens faster than you think."),
         ("Exercise", "Regular playtime and walks help prevent obesity and boost your pet’s mood."),
@@ -30,5 +26,3 @@
         ("Checkups", "Regular vet visits keep vaccinations and health checks up to date.")
     };
 }
-
-
