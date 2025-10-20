@@ -6,9 +6,9 @@
 @using Senior_Design_Pet_Care_App.Data
 @using Senior_Design_Pet_Care_App.Entities
 @using Senior_Design_Pet_Care_App.Services
-
 @inject ApplicationDbContext Db
 @inject IAuthService AuthService
+@inject NavigationManager NavigationManager
 
 @attribute [Authorize]
 
@@ -35,7 +35,7 @@
         @for (int day = 1; day <= DaysInMonth; day++)
         {
             var date = new DateTime(CurrentMonth.Year, CurrentMonth.Month, day);
-            <div class="calendar-day" @onclick="() => SelectDay(date)">
+            <div class="calendar-day" @onclick="() => GoToDay(date)">
                 <div class="date-number">@day</div>
 
                 @if (Events.TryGetValue(date.Date, out var list))
@@ -43,7 +43,7 @@
                     foreach (var ev in list.OrderBy(r => r.RemindAt.TimeOfDay))
                     {
                         <div class="event" title="@ev.Description">
-                            @FormatEvent(ev)
+                            @ev.Title
                         </div>
                     }
                 }
@@ -52,47 +52,9 @@
     </div>
 </div>
 
-@if (SelectedDay.HasValue)
-{
-    <div class="event-dialog mt-3 p-3 border rounded">
-        <h5>Add Reminder — @SelectedDay.Value.ToString("D")</h5>
-
-        <label class="form-label">Title</label>
-        <input class="form-control" @bind="NewTitle" placeholder="Reminder title" />
-
-        <label class="form-label mt-2">Time</label>
-        <input type="time" class="form-control" @bind="NewTime" />
-
-        <label class="form-label mt-2">Type</label>
-        <select class="form-control" @bind="NewTypeString">
-            @foreach (ReminderType t in Enum.GetValues(typeof(ReminderType)))
-            {
-                <option value="@t">@t.ToString()</option>
-            }
-        </select>
-
-        <label class="form-label mt-2">Description (optional)</label>
-        <textarea class="form-control" rows="2" @bind="NewDescription"></textarea>
-
-        <div class="mt-3">
-            <button class="btn btn-primary me-2" @onclick="AddEventAsync">Add</button>
-            <button class="btn btn-secondary" @onclick="() => SelectedDay = null">Close</button>
-        </div>
-    </div>
-}
-
 @code {
-    // calendar state
     private DateTime CurrentMonth { get; set; } = DateTime.Today;
     private Dictionary<DateTime, List<Reminder>> Events { get; set; } = new();
-    private DateTime? SelectedDay { get; set; }
-
-    // new reminder inputs
-    private string NewTitle { get; set; } = string.Empty;
-    private string NewDescription { get; set; } = string.Empty;
-    private TimeOnly NewTime { get; set; } = TimeOnly.FromDateTime(DateTime.Now); // ✅ now TimeOnly
-    private string NewTypeString { get; set; } = ReminderType.Other.ToString();
-
     private string[] DayNames = CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames;
     private int DaysInMonth => DateTime.DaysInMonth(CurrentMonth.Year, CurrentMonth.Month);
     private int FirstDayOffset => (int)new DateTime(CurrentMonth.Year, CurrentMonth.Month, 1).DayOfWeek;
@@ -105,62 +67,10 @@
     private void PreviousMonth() => CurrentMonth = CurrentMonth.AddMonths(-1);
     private void NextMonth() => CurrentMonth = CurrentMonth.AddMonths(1);
 
-    private void SelectDay(DateTime date)
+    private void GoToDay(DateTime date)
     {
-        SelectedDay = date.Date;
-        NewTitle = string.Empty;
-        NewDescription = string.Empty;
-        NewTime = TimeOnly.FromDateTime(DateTime.Now); // default to current time
-        NewTypeString = ReminderType.Other.ToString();
-    }
-
-    private async Task AddEventAsync()
-    {
-        if (!SelectedDay.HasValue) return;
-        if (string.IsNullOrWhiteSpace(NewTitle)) return;
-
-        // get current user's email
-        var email = AuthService.CurrentUser?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value
-                    ?? AuthService.CurrentUser?.Identity?.Name;
-
-        if (string.IsNullOrWhiteSpace(email)) return;
-
-        var user = await Db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower());
-        if (user == null) return;
-
-        // ✅ Combine Date + TimeOnly
-        var remindAt = SelectedDay.Value.Date + NewTime.ToTimeSpan();
-
-        if (!Enum.TryParse<ReminderType>(NewTypeString, out var parsedType))
-        {
-            parsedType = ReminderType.Other;
-        }
-
-        var reminder = new Reminder
-        {
-            UserId = user.Id,
-            Title = NewTitle.Trim(),
-            Description = string.IsNullOrWhiteSpace(NewDescription) ? null : NewDescription.Trim(),
-            RemindAt = remindAt,
-            Type = parsedType
-        };
-
-        Db.Reminders.Add(reminder);
-        await Db.SaveChangesAsync();
-
-        // update in-memory events
-        var key = reminder.RemindAt.Date;
-        if (!Events.ContainsKey(key)) Events[key] = new List<Reminder>();
-        Events[key].Add(reminder);
-
-        // reset
-        SelectedDay = null;
-        NewTitle = string.Empty;
-        NewDescription = string.Empty;
-        NewTime = TimeOnly.FromDateTime(DateTime.Now);
-        NewTypeString = ReminderType.Other.ToString();
-
-        StateHasChanged();
+        var dayString = date.ToString("yyyy-MM-dd");
+        NavigationManager.NavigateTo($"/dailyreminders/{dayString}");
     }
 
     private async Task LoadUserRemindersAsync()
@@ -184,7 +94,4 @@
             Events[key].Add(r);
         }
     }
-
-    private string FormatEvent(Reminder r)
-        => $"{r.RemindAt:HH\\:mm} - {r.Title} ({r.Type})";
 }
