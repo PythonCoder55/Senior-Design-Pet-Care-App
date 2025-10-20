@@ -17,6 +17,58 @@ namespace SeniorDesignPetCareApp.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
 
+            modelBuilder.Entity("Senior_Design_Pet_Care_App.Entities.Pet", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ActivityLevel")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Age")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Breed")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FoodsCsv")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Height")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MedicationsCsv")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("MostRecentVetAppointment")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("PictureData")
+                        .HasColumnType("BLOB");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Weight")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Pets");
+                });
+
             modelBuilder.Entity("Senior_Design_Pet_Care_App.Entities.Reminder", b =>
                 {
                     b.Property<int>("Id")
@@ -72,16 +124,6 @@ namespace SeniorDesignPetCareApp.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Users");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            CreatedAt = new DateTime(2025, 10, 7, 20, 44, 40, 412, DateTimeKind.Utc).AddTicks(1353),
-                            Email = "admin@gmail.com",
-                            PasswordHash = "AQAAAAIAAYagAAAAELOgXvmhHFtZuFaPEMFYTlfsxSvVW/sr1lW5Ga30PwZkF6ePVsBtELALbYqaYCPyZQ==",
-                            Role = "Admin"
-                        });
                 });
 #pragma warning restore 612, 618
         }

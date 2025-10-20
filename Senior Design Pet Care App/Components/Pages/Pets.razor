@@ -1,0 +1,483 @@
+﻿@page "/pets"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.EntityFrameworkCore
+@using Senior_Design_Pet_Care_App.Data
+@using Senior_Design_Pet_Care_App.Entities
+@using Senior_Design_Pet_Care_App.Services
+@using System.ComponentModel.DataAnnotations
+@inject ApplicationDbContext Db
+@inject IAuthService AuthService
+@inject NavigationManager NavigationManager
+
+@attribute [Authorize]
+
+<h3>My Pets</h3>
+
+@if (IsLoading)
+{
+    <p>Loading pets...</p>
+}
+else
+{
+    <div class="d-flex flex-wrap gap-3">
+        @if (PetsList.Count == 0)
+        {
+            <div>No pets yet. Add one below.</div>
+        }
+
+        @foreach (var pet in PetsList)
+        {
+            <div class="card" style="width: 12rem; cursor: pointer;" @onclick="() => SelectPet(pet)">
+                @if (pet.PictureData != null && pet.PictureData.Length > 0)
+                {
+                    <img src="@GetImageDataUrl(pet.PictureData)" class="card-img-top" style="height:120px; object-fit:cover" />
+                }
+                else
+                {
+                    <div style="height:120px; display:flex; align-items:center; justify-content:center; background:#f1f1f1;">No photo</div>
+                }
+                <div class="card-body">
+                    <h5 class="card-title mb-1">@pet.Name</h5>
+                    <p class="card-text small mb-0">@pet.Breed</p>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<div class="mt-3">
+    <button class="btn btn-primary" @onclick="ShowAddForm">Add Pet</button>
+</div>
+
+@if (ShowForm)
+{
+    <div class="mt-4 p-3 border rounded" style="max-width:800px;">
+        <h5>@(EditingPet == null ? "Add Pet" : $"Edit Pet — {EditingPet.Name}")</h5>
+
+        <EditForm Model="FormModel" OnValidSubmit="HandleValidSubmit">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="mb-2">
+                <label class="form-label">Name *</label>
+                <InputText class="form-control" @bind-Value="FormModel.Name" />
+            </div>
+
+            <div class="mb-2">
+                <label class="form-label">Breed</label>
+                <InputSelect class="form-control" @bind-Value="FormModel.Breed">
+                    <option value="">-- select breed --</option>
+                    @foreach (var breed in DogBreeds)
+                    {
+                        <option value="@breed">@breed</option>
+                    }
+                </InputSelect>
+            </div>
+
+            <div class="row">
+                <div class="col-md-3 mb-2">
+                    <label class="form-label">Age (years) *</label>
+                    <InputNumber class="form-control" @bind-Value="FormModel.Age" />
+                </div>
+                <div class="col-md-3 mb-2">
+                    <label class="form-label">Height *</label>
+                    <InputNumber class="form-control" @bind-Value="FormModel.Height" />
+                    <div class="form-text">(units: inches)</div>
+                </div>
+                <div class="col-md-3 mb-2">
+                    <label class="form-label">Weight *</label>
+                    <InputNumber class="form-control" @bind-Value="FormModel.Weight" />
+                    <div class="form-text">(units: pounds)</div>
+                </div>
+
+                <div class="col-md-3 mb-2">
+                    <label class="form-label">Activity Level *</label>
+                    <InputSelect class="form-control" @bind-Value="FormModel.ActivityLevel">
+                        @foreach (ActivityLevel a in Enum.GetValues(typeof(ActivityLevel)))
+                        {
+                            <option value="@a">@a.ToString()</option>
+                        }
+                    </InputSelect>
+                </div>
+            </div>
+
+            <div class="row mt-2">
+                <div class="col-md-6">
+                    <label class="form-label">Foods (optional)</label>
+                    <div class="input-group mb-2">
+                        <input class="form-control" placeholder="Add a food" @bind="NewFood" />
+                        <button type="button" class="btn btn-outline-secondary" @onclick="AddFood">Add</button>
+                    </div>
+                    @if (FoodsList.Any())
+                    {
+                        <ul class="list-group">
+                            @foreach (var f in FoodsList.Select((val, idx) => new { val, idx }))
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    @f.val
+                                    <button class="btn btn-sm btn-danger" @onclick="() => RemoveFood(f.idx)">Remove</button>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Medications (optional)</label>
+                    <div class="input-group mb-2">
+                        <input class="form-control" placeholder="Add a medication" @bind="NewMedication" />
+                        <button type="button" class="btn btn-outline-secondary" @onclick="AddMedication">Add</button>
+                    </div>
+                    @if (MedicationsList.Any())
+                    {
+                        <ul class="list-group">
+                            @foreach (var m in MedicationsList.Select((val, idx) => new { val, idx }))
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    @m.val
+                                    <button class="btn btn-sm btn-danger" @onclick="() => RemoveMedication(m.idx)">Remove</button>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+
+            <div class="row mt-3">
+                <div class="col-md-6 mb-2">
+                    <label class="form-label">Most Recent Vet Appointment (optional)</label>
+                    <InputDate class="form-control" @bind-Value="FormModel.MostRecentVetAppointment" />
+                </div>
+
+                <div class="col-md-6 mb-2">
+                    <label class="form-label">Picture (optional)</label>
+                    <InputFile OnChange="OnInputFileChange" />
+                    @if (PreviewImageUrl != null)
+                    {
+                        <div class="mt-2">
+                            <img src="@PreviewImageUrl" style="max-height:150px; object-fit:cover;" />
+                            <div>
+                                <button type="button" class="btn btn-sm btn-outline-danger mt-1" @onclick="ClearImage">Remove</button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="mt-3">
+                <label class="form-label">Notes (optional)</label>
+                <InputTextArea class="form-control" @bind-Value="FormModel.Notes" Rows="3" />
+            </div>
+
+            <div class="mt-3">
+                <button class="btn btn-success" type="submit">Save</button>
+                @if (EditingPet != null)
+                {
+                    <button type="button" class="btn btn-danger ms-2" @onclick="DeletePet">Delete</button>
+                }
+                <button type="button" class="btn btn-secondary ms-2" @onclick="CancelEdit">Cancel</button>
+            </div>
+        </EditForm>
+    </div>
+}
+
+@code {
+    private bool IsLoading = true;
+    private List<Pet> PetsList = new();
+    private bool ShowForm = false;
+    private Pet? EditingPet;
+
+    // Form model (use a simple DTO to avoid tracking issues while editing)
+    private PetFormModel FormModel = new();
+
+    // lists for foods/meds
+    private List<string> FoodsList = new();
+    private List<string> MedicationsList = new();
+    private string NewFood = string.Empty;
+    private string NewMedication = string.Empty;
+
+    private IBrowserFile? UploadedFile;
+    private string? PreviewImageUrl;
+
+    // example dog breeds list (add/remove as you like)
+    private readonly List<string> DogBreeds = new()
+    {
+        "Labrador Retriever","German Shepherd","Golden Retriever","French Bulldog","Bulldog",
+        "Poodle","Beagle","Rottweiler","Yorkshire Terrier","Boxer","Other"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPetsAsync();
+    }
+
+    private async Task LoadPetsAsync()
+    {
+        IsLoading = true;
+        PetsList.Clear();
+
+        var email = AuthService.CurrentUser?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value
+                    ?? AuthService.CurrentUser?.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            IsLoading = false;
+            return;
+        }
+
+        var user = await Db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower());
+        if (user == null)
+        {
+            IsLoading = false;
+            return;
+        }
+
+        PetsList = await Db.Pets.AsNoTracking().Where(p => p.UserId == user.Id).ToListAsync();
+        IsLoading = false;
+    }
+
+    private void ShowAddForm()
+    {
+        EditingPet = null;
+        FormModel = new PetFormModel
+        {
+            ActivityLevel = ActivityLevel.Medium,
+            Age = 0,
+            Height = 0,
+            Weight = 0,
+            Breed = ""
+        };
+        FoodsList.Clear();
+        MedicationsList.Clear();
+        UploadedFile = null;
+        PreviewImageUrl = null;
+        ShowForm = true;
+    }
+
+    private void SelectPet(Pet pet)
+    {
+        EditingPet = pet;
+        FormModel = new PetFormModel
+        {
+            Name = pet.Name,
+            Breed = pet.Breed,
+            Age = pet.Age,
+            Height = pet.Height,
+            Weight = pet.Weight,
+            ActivityLevel = pet.ActivityLevel,
+            MostRecentVetAppointment = pet.MostRecentVetAppointment,
+            Notes = pet.Notes
+        };
+
+        FoodsList = ParseCsv(pet.FoodsCsv);
+        MedicationsList = ParseCsv(pet.MedicationsCsv);
+
+        if (pet.PictureData != null && pet.PictureData.Length > 0)
+        {
+            PreviewImageUrl = GetImageDataUrl(pet.PictureData);
+        }
+        else
+        {
+            PreviewImageUrl = null;
+        }
+
+        ShowForm = true;
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        var email = AuthService.CurrentUser?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value
+                    ?? AuthService.CurrentUser?.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(email)) return;
+
+        var user = await Db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower());
+        if (user == null) return;
+
+        if (EditingPet == null)
+        {
+            var pet = new Pet
+            {
+                UserId = user.Id,
+                Name = FormModel.Name?.Trim() ?? "",
+                Breed = FormModel.Breed ?? "",
+                Age = FormModel.Age,
+                Height = FormModel.Height,
+                Weight = FormModel.Weight,
+                ActivityLevel = FormModel.ActivityLevel,
+                FoodsCsv = JoinCsv(FoodsList),
+                MedicationsCsv = JoinCsv(MedicationsList),
+                MostRecentVetAppointment = FormModel.MostRecentVetAppointment,
+                Notes = string.IsNullOrWhiteSpace(FormModel.Notes) ? null : FormModel.Notes
+            };
+
+            if (UploadedFile != null)
+                pet.PictureData = await ReadFileToBytesAsync(UploadedFile);
+
+            Db.Pets.Add(pet);
+        }
+        else
+        {
+            // ⚙️ Detach any already-tracked instance of this Pet
+            var local = Db.Pets.Local.FirstOrDefault(p => p.Id == EditingPet.Id);
+            if (local != null)
+            {
+                Db.Entry(local).State = EntityState.Detached;
+            }
+
+            if (PreviewImageUrl == null)
+            {
+                // If preview is cleared, remove picture
+                EditingPet.PictureData = null;
+            }
+
+            // Update existing pet safely
+            var petToUpdate = new Pet
+            {
+                Id = EditingPet.Id,
+                UserId = EditingPet.UserId,
+                Name = FormModel.Name?.Trim() ?? "",
+                Breed = FormModel.Breed ?? "",
+                Age = FormModel.Age,
+                Height = FormModel.Height,
+                Weight = FormModel.Weight,
+                ActivityLevel = FormModel.ActivityLevel,
+                FoodsCsv = JoinCsv(FoodsList),
+                MedicationsCsv = JoinCsv(MedicationsList),
+                MostRecentVetAppointment = FormModel.MostRecentVetAppointment,
+                Notes = string.IsNullOrWhiteSpace(FormModel.Notes) ? null : FormModel.Notes,
+                PictureData = UploadedFile != null
+                    ? await ReadFileToBytesAsync(UploadedFile)
+                    : EditingPet.PictureData
+            };
+
+            Db.Pets.Update(petToUpdate);
+        }
+
+        await Db.SaveChangesAsync();
+        await LoadPetsAsync();
+        ShowForm = false;
+        EditingPet = null;
+        UploadedFile = null;
+        PreviewImageUrl = null;
+    }
+
+    private async Task DeletePet()
+    {
+        if (EditingPet == null) return;
+
+        // ⚙️ Detach any already-tracked instance
+        var local = Db.Pets.Local.FirstOrDefault(p => p.Id == EditingPet.Id);
+        if (local != null)
+        {
+            Db.Entry(local).State = EntityState.Detached;
+        }
+
+        var petToDelete = await Db.Pets.AsNoTracking().FirstOrDefaultAsync(p => p.Id == EditingPet.Id);
+        if (petToDelete != null)
+        {
+            Db.Pets.Remove(petToDelete);
+            await Db.SaveChangesAsync();
+        }
+
+        await LoadPetsAsync();
+        ShowForm = false;
+        EditingPet = null;
+    }
+
+    private void CancelEdit()
+    {
+        ShowForm = false;
+        EditingPet = null;
+        UploadedFile = null;
+        PreviewImageUrl = null;
+    }
+
+    private void AddFood()
+    {
+        if (!string.IsNullOrWhiteSpace(NewFood))
+        {
+            FoodsList.Add(NewFood.Trim());
+            NewFood = "";
+        }
+    }
+
+    private void RemoveFood(int idx)
+    {
+        if (idx >= 0 && idx < FoodsList.Count) FoodsList.RemoveAt(idx);
+    }
+
+    private void AddMedication()
+    {
+        if (!string.IsNullOrWhiteSpace(NewMedication))
+        {
+            MedicationsList.Add(NewMedication.Trim());
+            NewMedication = "";
+        }
+    }
+
+    private void RemoveMedication(int idx)
+    {
+        if (idx >= 0 && idx < MedicationsList.Count) MedicationsList.RemoveAt(idx);
+    }
+
+    private async Task OnInputFileChange(InputFileChangeEventArgs e)
+    {
+        UploadedFile = e.File;
+        // generate preview url (read as base64)
+        var buffer = await ReadFileToBytesAsync(UploadedFile);
+        PreviewImageUrl = GetImageDataUrl(buffer);
+    }
+
+    private void ClearImage()
+    {
+        UploadedFile = null;
+        PreviewImageUrl = null;
+    }
+
+    private async Task<byte[]> ReadFileToBytesAsync(IBrowserFile file)
+    {
+        // limit file size according to your needs. Here I allow up to 5MB.
+        long maxBytes = 5 * 1024 * 1024;
+        if (file.Size > maxBytes)
+        {
+            // simple handling: trim or throw; here we read up to maxBytes.
+        }
+
+        using var stream = file.OpenReadStream(maxBytes);
+        using var ms = new System.IO.MemoryStream();
+        await stream.CopyToAsync(ms);
+        return ms.ToArray();
+    }
+
+    private string GetImageDataUrl(byte[] bytes)
+    {
+        var base64 = Convert.ToBase64String(bytes);
+        return $"data:image;base64,{base64}";
+    }
+
+    private List<string> ParseCsv(string? csv)
+    {
+        if (string.IsNullOrWhiteSpace(csv)) return new List<string>();
+        return csv.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+    }
+
+    private string? JoinCsv(List<string> list)
+    {
+        if (list == null || list.Count == 0) return null;
+        return string.Join(';', list.Select(s => s.Trim()));
+    }
+
+    // form DTO to avoid EF tracked entity binding
+    private class PetFormModel
+    {
+        [Required] public string? Name { get; set; }
+        public string? Breed { get; set; }
+        [Required] public int Age { get; set; }
+        [Required] public decimal Height { get; set; }
+        [Required] public decimal Weight { get; set; }
+        [Required] public ActivityLevel ActivityLevel { get; set; } = ActivityLevel.Medium;
+        public DateTime? MostRecentVetAppointment { get; set; }
+        public string? Notes { get; set; }
+    }
+}

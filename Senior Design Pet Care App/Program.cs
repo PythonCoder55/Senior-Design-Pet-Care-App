@@ -1,11 +1,12 @@
-using Senior_Design_Pet_Care_App.Components;
-using Senior_Design_Pet_Care_App.Components.Pages;
-using Senior_Design_Pet_Care_App.Services;
 using Blazored.SessionStorage;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Senior_Design_Pet_Care_App.Components;
+using Senior_Design_Pet_Care_App.Components.Pages;
 using Senior_Design_Pet_Care_App.Data;
+using Senior_Design_Pet_Care_App.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,7 +32,8 @@ builder.Services.AddCascadingAuthenticationState();
 // Add EF Core SQLite
 var conn = builder.Configuration.GetConnectionString("PetCareDb") ?? "Data Source=PetCare.db";
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite(conn));
+    options.UseSqlite(conn).EnableSensitiveDataLogging()
+);
 
 // Register AuthDataService (now async)
 builder.Services.AddScoped<IAuthDataService, AuthDataService>();
