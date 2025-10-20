@@ -4,11 +4,12 @@ using Microsoft.AspNetCore.Identity;
 
 namespace Senior_Design_Pet_Care_App.Data
 {
-    public class AuthDbContext : DbContext
+    public class ApplicationDbContext : DbContext
     {
-        public AuthDbContext(DbContextOptions<AuthDbContext> options) : base(options) { }
+        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
 
-        public DbSet<User> Users { get; set; }
+        public DbSet<User> Users { get; set; } = null!;
+        public DbSet<Reminder> Reminders { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -24,10 +25,15 @@ namespace Senior_Design_Pet_Care_App.Data
                 CreatedAt = DateTime.UtcNow
             };
 
-            // Hash the password "admin"
+            // Hash the password "adminPass1!"
             admin.PasswordHash = hasher.HashPassword(admin, "adminPass1!");
 
             modelBuilder.Entity<User>().HasData(admin);
+
+            // Optionally configure relationships, indexes, etc.
+            modelBuilder.Entity<Reminder>()
+                .Property(r => r.Type)
+                .HasConversion<string>(); // store enum as string (optional)
         }
     }
 }

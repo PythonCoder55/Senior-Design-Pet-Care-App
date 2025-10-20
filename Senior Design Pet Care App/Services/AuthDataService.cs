@@ -11,10 +11,10 @@ namespace Senior_Design_Pet_Care_App.Services
     /// </summary>
     public class AuthDataService : IAuthDataService
     {
-        private readonly AuthDbContext _db;
+        private readonly ApplicationDbContext _db;
         private readonly PasswordHasher<User> _pwHasher;
 
-        public AuthDataService(AuthDbContext db)
+        public AuthDataService(ApplicationDbContext db)
         {
             _db = db;
             _pwHasher = new PasswordHasher<User>();

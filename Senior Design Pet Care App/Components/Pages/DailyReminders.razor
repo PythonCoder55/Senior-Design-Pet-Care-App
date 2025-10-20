@@ -1,0 +1,187 @@
+﻿@page "/dailyreminders/{dateString}"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using System.Security.Claims
+@using Senior_Design_Pet_Care_App.Data
+@using Senior_Design_Pet_Care_App.Entities
+@using Senior_Design_Pet_Care_App.Services
+
+@attribute [Authorize]
+@inject ApplicationDbContext Db
+@inject IAuthService AuthService
+@inject NavigationManager NavigationManager
+
+<h3>Reminders for @SelectedDate.ToString("D")</h3>
+
+@if (Reminders == null)
+{
+    <p>Loading reminders...</p>
+}
+else if (Reminders.Count == 0)
+{
+    <p>No reminders yet. Click below to add one.</p>
+}
+else
+{
+    <ul class="list-group">
+        @foreach (var reminder in Reminders.OrderBy(r => r.RemindAt.TimeOfDay))
+        {
+            <li class="list-group-item d-flex justify-content-between align-items-center"
+                @onclick="() => SelectReminder(reminder)">
+                <span>@reminder.RemindAt.ToString("hh\\:mm tt") — @reminder.Title</span>
+            </li>
+        }
+    </ul>
+}
+
+<div class="mt-3">
+    <button class="btn btn-primary" @onclick="ShowAddForm">Add Reminder</button>
+    <button class="btn btn-secondary ms-2" @onclick="GoBack">Back to Calendar</button>
+</div>
+
+@if (ShowForm)
+{
+    <div class="mt-4 p-3 border rounded">
+        <h5>@(EditingReminder == null ? "Add Reminder" : "Edit Reminder")</h5>
+
+        <label>Title</label>
+        <input class="form-control" @bind="FormTitle" />
+
+        <label class="mt-2">Time</label>
+        <input type="time" class="form-control" @bind="FormTime" />
+
+        <label class="mt-2">Type</label>
+        <select class="form-control" @bind="FormTypeString">
+            @foreach (ReminderType t in Enum.GetValues(typeof(ReminderType)))
+            {
+                <option value="@t">@t.ToString()</option>
+            }
+        </select>
+
+        <label class="mt-2">Description</label>
+        <textarea class="form-control" rows="2" @bind="FormDescription"></textarea>
+
+        <div class="mt-3">
+            @if (EditingReminder == null)
+            {
+                <button class="btn btn-success" @onclick="AddReminder">Add</button>
+            }
+            else
+            {
+                <button class="btn btn-success" @onclick="UpdateReminder">Save</button>
+                <button class="btn btn-danger ms-2" @onclick="DeleteReminder">Delete</button>
+            }
+            <button class="btn btn-secondary ms-2" @onclick="CancelEdit">Cancel</button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string dateString { get; set; } = string.Empty;
+    private DateTime SelectedDate;
+    private List<Reminder> Reminders = new();
+
+    private bool ShowForm = false;
+    private Reminder? EditingReminder;
+
+    private string FormTitle = string.Empty;
+    private string FormDescription = string.Empty;
+    private TimeOnly FormTime = TimeOnly.FromDateTime(DateTime.Now);
+    private string FormTypeString = ReminderType.Other.ToString();
+
+    protected override async Task OnInitializedAsync()
+    {
+        SelectedDate = DateTime.Parse(dateString);
+        await LoadRemindersAsync();
+    }
+
+    private async Task LoadRemindersAsync()
+    {
+        var email = AuthService.CurrentUser?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value
+                    ?? AuthService.CurrentUser?.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(email)) return;
+
+        var user = await Db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower());
+        if (user == null) return;
+
+        Reminders = await Db.Reminders.Where(r => r.UserId == user.Id && r.RemindAt.Date == SelectedDate.Date)
+                                      .OrderBy(r => r.RemindAt)
+                                      .ToListAsync();
+    }
+
+    private void ShowAddForm()
+    {
+        EditingReminder = null;
+        FormTitle = "";
+        FormDescription = "";
+        FormTime = TimeOnly.FromDateTime(DateTime.Now);
+        FormTypeString = ReminderType.Other.ToString();
+        ShowForm = true;
+    }
+
+    private void SelectReminder(Reminder reminder)
+    {
+        EditingReminder = reminder;
+        FormTitle = reminder.Title;
+        FormDescription = reminder.Description ?? "";
+        FormTime = TimeOnly.FromDateTime(reminder.RemindAt);
+        FormTypeString = reminder.Type.ToString();
+        ShowForm = true;
+    }
+
+    private async Task AddReminder()
+    {
+        var email = AuthService.CurrentUser?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value
+                    ?? AuthService.CurrentUser?.Identity?.Name;
+        var user = await Db.Users.FirstAsync(u => u.Email.ToLower() == email.ToLower());
+
+        var remindAt = SelectedDate.Date + FormTime.ToTimeSpan();
+        Enum.TryParse(FormTypeString, out ReminderType parsedType);
+
+        var reminder = new Reminder
+        {
+            UserId = user.Id,
+            Title = FormTitle,
+            Description = string.IsNullOrWhiteSpace(FormDescription) ? null : FormDescription,
+            RemindAt = remindAt,
+            Type = parsedType
+        };
+
+        Db.Reminders.Add(reminder);
+        await Db.SaveChangesAsync();
+
+        await LoadRemindersAsync();
+        ShowForm = false;
+    }
+
+    private async Task UpdateReminder()
+    {
+        if (EditingReminder == null) return;
+
+        Enum.TryParse(FormTypeString, out ReminderType parsedType);
+        EditingReminder.Title = FormTitle;
+        EditingReminder.Description = string.IsNullOrWhiteSpace(FormDescription) ? null : FormDescription;
+        EditingReminder.RemindAt = SelectedDate.Date + FormTime.ToTimeSpan();
+        EditingReminder.Type = parsedType;
+
+        Db.Reminders.Update(EditingReminder);
+        await Db.SaveChangesAsync();
+
+        await LoadRemindersAsync();
+        ShowForm = false;
+    }
+
+    private async Task DeleteReminder()
+    {
+        if (EditingReminder == null) return;
+
+        Db.Reminders.Remove(EditingReminder);
+        await Db.SaveChangesAsync();
+
+        await LoadRemindersAsync();
+        ShowForm = false;
+    }
+
+    private void CancelEdit() => ShowForm = false;
+    private void GoBack() => NavigationManager.NavigateTo("/calendar");
+}

@@ -1,17 +1,24 @@
 ﻿@page "/calendar"
 @using System.Globalization
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using System.Security.Claims
+@using Senior_Design_Pet_Care_App.Data
+@using Senior_Design_Pet_Care_App.Entities
+@using Senior_Design_Pet_Care_App.Services
+@inject ApplicationDbContext Db
+@inject IAuthService AuthService
+@inject NavigationManager NavigationManager
 
-@* You have to be logged in to view this page. *@
 @attribute [Authorize]
 
 <h3>Calendar</h3>
 
 <div class="calendar-container">
-    <div class="calendar-header">
-        <button class="btn btn-sm btn-secondary" @onclick="PreviousMonth">←</button>
-        <span>@CurrentMonth.ToString("MMMM yyyy")</span>
-        <button class="btn btn-sm btn-secondary" @onclick="NextMonth">→</button>
+    <div class="calendar-header mb-2">
+        <button class="btn btn-sm btn-secondary me-2" @onclick="PreviousMonth">←</button>
+        <strong>@CurrentMonth.ToString("MMMM yyyy")</strong>
+        <button class="btn btn-sm btn-secondary ms-2" @onclick="NextMonth">→</button>
     </div>
 
     <div class="calendar-grid">
@@ -28,13 +35,16 @@
         @for (int day = 1; day <= DaysInMonth; day++)
         {
             var date = new DateTime(CurrentMonth.Year, CurrentMonth.Month, day);
-            <div class="calendar-day" @onclick="() => SelectDay(date)">
+            <div class="calendar-day" @onclick="() => GoToDay(date)">
                 <div class="date-number">@day</div>
-                @if (Events.TryGetValue(date.Date, out var eventList))
+
+                @if (Events.TryGetValue(date.Date, out var list))
                 {
-                    foreach (var e in eventList)
+                    foreach (var ev in list.OrderBy(r => r.RemindAt.TimeOfDay))
                     {
-                        <div class="event">@e</div>
+                        <div class="event" title="@ev.Description">
+                            @ev.Title
+                        </div>
                     }
                 }
             </div>
@@ -42,47 +52,46 @@
     </div>
 </div>
 
-@if (SelectedDay.HasValue)
-{
-    <div class="event-dialog">
-        <h4>Add Event - @SelectedDay.Value.ToString("D")</h4>
-        <input @bind="NewEventText" placeholder="Event description" class="form-control" />
-        <button class="btn btn-primary mt-2" @onclick="AddEvent">Add</button>
-        <button class="btn btn-secondary mt-2" @onclick="() => SelectedDay = null">Close</button>
-    </div>
-}
-
 @code {
-    private DateTime CurrentMonth = DateTime.Today;
-    private Dictionary<DateTime, List<string>> Events = new();
-    private DateTime? SelectedDay;
-    private string? NewEventText;
-
+    private DateTime CurrentMonth { get; set; } = DateTime.Today;
+    private Dictionary<DateTime, List<Reminder>> Events { get; set; } = new();
     private string[] DayNames = CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames;
-
     private int DaysInMonth => DateTime.DaysInMonth(CurrentMonth.Year, CurrentMonth.Month);
     private int FirstDayOffset => (int)new DateTime(CurrentMonth.Year, CurrentMonth.Month, 1).DayOfWeek;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUserRemindersAsync();
+    }
 
     private void PreviousMonth() => CurrentMonth = CurrentMonth.AddMonths(-1);
     private void NextMonth() => CurrentMonth = CurrentMonth.AddMonths(1);
 
-    private void SelectDay(DateTime date)
+    private void GoToDay(DateTime date)
     {
-        SelectedDay = date;
-        NewEventText = string.Empty;
+        var dayString = date.ToString("yyyy-MM-dd");
+        NavigationManager.NavigateTo($"/dailyreminders/{dayString}");
     }
 
-    private void AddEvent()
+    private async Task LoadUserRemindersAsync()
     {
-        if (SelectedDay.HasValue && !string.IsNullOrWhiteSpace(NewEventText))
-        {
-            if (!Events.ContainsKey(SelectedDay.Value.Date))
-            {
-                Events[SelectedDay.Value.Date] = new List<string>();
-            }
+        Events.Clear();
 
-            Events[SelectedDay.Value.Date].Add(NewEventText);
-            NewEventText = string.Empty;
+        var email = AuthService.CurrentUser?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value
+                    ?? AuthService.CurrentUser?.Identity?.Name;
+
+        if (string.IsNullOrWhiteSpace(email)) return;
+
+        var user = await Db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower());
+        if (user == null) return;
+
+        var reminders = await Db.Reminders.AsNoTracking().Where(r => r.UserId == user.Id).ToListAsync();
+
+        foreach (var r in reminders)
+        {
+            var key = r.RemindAt.Date;
+            if (!Events.ContainsKey(key)) Events[key] = new List<Reminder>();
+            Events[key].Add(r);
         }
     }
 }
