@@ -1,0 +1,72 @@
+﻿@page "/signup"
+
+<div class="text-center w-100 m-2 text-black-50">
+    <h2>Create an account</h2>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <h5 class="card-title">Sign Up</h5>
+
+        <EditForm Model="signUpModel" OnValidSubmit="HandleSignUp">
+            <DataAnnotationsValidator />
+
+            <div class="form-group">
+                <label for="email">Email</label>
+                <InputText id="email" class="form-control" @bind-Value="signUpModel.Email" />
+                <ValidationMessage For="@(() => signUpModel.Email)" />
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <InputText id="password" type="password" class="form-control" @bind-Value="signUpModel.Password" />
+                <ValidationMessage For="@(() => signUpModel.Password)" />
+            </div>
+
+            <div class="form-group">
+                <label for="confirm">Confirm Password</label>
+                <InputText id="confirm" type="password" class="form-control" @bind-Value="signUpModel.ConfirmPassword" />
+                <ValidationMessage For="@(() => signUpModel.ConfirmPassword)" />
+            </div>
+
+            <h6 class="warning text-center" style="display:@DisplayMessage">@Message</h6>
+
+            <div class="w-100 text-center">
+                <button type="submit" class="btn btn-primary">Create Account</button>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private SignUpModel signUpModel = new();
+    [Inject] private IAuthDataService AuthDataService { get; set; }
+    [Inject] private NavigationManager NavigationManager { get; set; }
+
+    private string DisplayMessage { get; set; } = "none;";
+    private string Message { get; set; } = string.Empty;
+
+    private async Task HandleSignUp()
+    {
+        DisplayMessage = "none;";
+
+        if (signUpModel.Password != signUpModel.ConfirmPassword)
+        {
+            Message = "Passwords do not match";
+            DisplayMessage = "block;";
+            return;
+        }
+
+        var result = await AuthDataService.RegisterAsync(signUpModel.Email, signUpModel.Password);
+
+        if (!result.Success)
+        {
+            Message = result.Message;
+            DisplayMessage = "block;";
+            return;
+        }
+
+        // Registration succeeded, redirect to login page
+        NavigationManager.NavigateTo("/login");
+    }
+}

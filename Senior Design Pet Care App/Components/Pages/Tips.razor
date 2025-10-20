@@ -1,0 +1,32 @@
+@page "/tips"
+@using System.Globalization
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+
+
+<PageTitle>Pet Care Tips & Tricks</PageTitle>
+
+<h3>Pet Care Tips & Tricks</h3>
+
+<div class="container mt-4">
+    @foreach (var tip in PetTips)
+    {
+        <div class="card mb-3 shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">@tip.Title</h5>
+                <p class="card-text">@tip.Description</p>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<(string Title, string Description)> PetTips = new()
+    {
+        ("Hydration", "Always keep fresh water available. Dehydration happens faster than you think."),
+        ("Exercise", "Regular playtime and walks help prevent obesity and boost your pet’s mood."),
+        ("Grooming", "Brush your pets regularly to prevent matting and skin irritation."),
+        ("Nutrition", "Feed your pets a balanced diet—avoid too many treats!"),
+        ("Checkups", "Regular vet visits keep vaccinations and health checks up to date.")
+    };
+}

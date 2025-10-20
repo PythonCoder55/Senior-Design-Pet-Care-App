@@ -1,4 +1,7 @@
-﻿@inherits LayoutComponentBase
+﻿@using Senior_Design_Pet_Care_App.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@inherits LayoutComponentBase
 
 <div class="page">
     <div class="sidebar">
@@ -6,9 +9,18 @@
     </div>
 
     <main>
-        <div class="top-row px-4">
+        @* Example of using the AuthorizeView component to display different content based on the user's authentication status: *@
+        <AuthorizeView>
+            <Authorized>
+                <div class="top-row px-4">
+                    <p>@context.User.Identity.Name</p>
+                    <button type="submit" class="btn btn-primary" id="logout" @onclick="Logout">Logout</button>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+        @* <div class="top-row px-4">
             <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
-        </div>
+        </div> *@
 
         <article class="content px-4">
             @Body
@@ -16,8 +28,46 @@
     </main>
 </div>
 
-<div id="blazor-error-ui" data-nosnippet>
+<div id="blazor-error-ui">
     An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
+    <a href="" class="reload">Reload</a>
+    <a class="dismiss">🗙</a>
 </div>
+
+@code {
+    [Inject] private IAuthService AuthService { get; set; }
+    [Inject] private NavigationManager NavigationManager { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // A hard refresh or the user just navigated to the application for the first time
+        if (firstRender && !AuthService.IsLoggedIn)
+        {
+            var url = NavigationManager.ToAbsoluteUri(NavigationManager.Uri).ToString();
+            if (url.Contains("/login"))
+            {
+                return;
+            }
+
+            var restoredFromState = await AuthService.GetStateFromTokenAsync();
+            //The user lost their server side session, but still has a valid JWT
+            if (restoredFromState)
+            {
+                NavigationManager.Refresh();
+            }
+        }
+    }
+
+    private async Task Logout()
+    {
+        if (AuthService.IsLoggedIn)
+        {
+            await AuthService.LogoutAsync();
+            NavigationManager.NavigateTo("/");
+        }
+        else
+        {
+            NavigationManager.NavigateTo("/");
+        }
+    }
+}
