@@ -2,23 +2,22 @@
 @using System.Globalization
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
-@using System.Security.Claims
 @using Senior_Design_Pet_Care_App.Data
 @using Senior_Design_Pet_Care_App.Entities
 @using Senior_Design_Pet_Care_App.Services
+@using System.Security.Claims
 @inject ApplicationDbContext Db
 @inject IAuthService AuthService
-@inject NavigationManager NavigationManager
 
 @attribute [Authorize]
 
-<h3>Calendar</h3>
+<h3>Pet Care Calendar</h3>
 
 <div class="calendar-container">
-    <div class="calendar-header mb-2">
-        <button class="btn btn-sm btn-secondary me-2" @onclick="PreviousMonth">←</button>
-        <strong>@CurrentMonth.ToString("MMMM yyyy")</strong>
-        <button class="btn btn-sm btn-secondary ms-2" @onclick="NextMonth">→</button>
+    <div class="calendar-header">
+        <button class="btn btn-sm btn-secondary" @onclick="PreviousMonth">←</button>
+        <span>@CurrentMonth.ToString("MMMM yyyy")</span>
+        <button class="btn btn-sm btn-secondary" @onclick="NextMonth">→</button>
     </div>
 
     <div class="calendar-grid">
@@ -35,15 +34,18 @@
         @for (int day = 1; day <= DaysInMonth; day++)
         {
             var date = new DateTime(CurrentMonth.Year, CurrentMonth.Month, day);
-            <div class="calendar-day" @onclick="() => GoToDay(date)">
+            <div class="calendar-day" @onclick="() => SelectDay(date)">
                 <div class="date-number">@day</div>
-
-                @if (Events.TryGetValue(date.Date, out var list))
+                @if (Events.TryGetValue(date.Date, out var eventList))
                 {
-                    foreach (var ev in list.OrderBy(r => r.RemindAt.TimeOfDay))
+                    foreach (var e in eventList)
                     {
-                        <div class="event" title="@ev.Description">
-                            @ev.Title
+                        <div class="event">
+                            <strong>@e.PetName:</strong> @e.Description
+                            @if (e.IsFlagged)
+                            {
+                                <span class="badge bg-danger ms-1">Flagged</span>
+                            }
                         </div>
                     }
                 }
@@ -52,31 +54,79 @@
     </div>
 </div>
 
+@if (SelectedDay.HasValue)
+{
+    <div class="event-dialog mt-3 p-3 border rounded">
+        <h4>Add Pet Reminder — @SelectedDay.Value.ToString("D")</h4>
+
+        <div class="mb-2">
+            <label class="form-label">Select Pet</label>
+            <select class="form-select" @bind="SelectedPetId">
+                <option value="">-- Select a pet --</option>
+                @foreach (var p in Pets)
+                {
+                    <option value="@p.Id">@p.Name (@p.Breed)</option>
+                }
+            </select>
+        </div>
+
+        <div class="mb-2">
+            <label class="form-label">Description</label>
+            <input @bind="NewEventText" class="form-control" placeholder="e.g. Give medicine, vet visit, etc." />
+        </div>
+
+        <div class="mb-2">
+            <label class="form-label">End Date</label>
+            <InputDate class="form-control" @bind-Value="EndDate" />
+        </div>
+
+        <div class="mb-2">
+            <label class="form-label">Recurrence</label>
+            <select class="form-select" @bind="SelectedRecurrence">
+                <option value="None">None</option>
+                <option value="Weekly">Weekly</option>
+                <option value="Biweekly">Biweekly</option>
+                <option value="Monthly">Monthly</option>
+            </select>
+        </div>
+
+        <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" @bind="IsFlagged" id="flagCheck" />
+            <label class="form-check-label" for="flagCheck">Flag as important (e.g. medication, vet issue)</label>
+        </div>
+
+        <div class="mt-3">
+            <button class="btn btn-primary me-2" @onclick="AddEvent">Add</button>
+            <button class="btn btn-secondary" @onclick="() => SelectedDay = null">Close</button>
+        </div>
+    </div>
+}
+
 @code {
-    private DateTime CurrentMonth { get; set; } = DateTime.Today;
-    private Dictionary<DateTime, List<Reminder>> Events { get; set; } = new();
+    private DateTime CurrentMonth = DateTime.Today;
+    private Dictionary<DateTime, List<PetEvent>> Events = new();
+    private DateTime? SelectedDay;
+    private string? NewEventText;
+    private string? SelectedRecurrence = "None";
+    private bool IsFlagged = false;
+    private DateTime? EndDate;
+
+    private List<Pet> Pets = new();
+    private string? SelectedPetId;
+
     private string[] DayNames = CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames;
+
     private int DaysInMonth => DateTime.DaysInMonth(CurrentMonth.Year, CurrentMonth.Month);
     private int FirstDayOffset => (int)new DateTime(CurrentMonth.Year, CurrentMonth.Month, 1).DayOfWeek;
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadUserRemindersAsync();
+        await LoadPetsAsync();
+        await LoadSampleDataAsync(); // optional: seeds demo pets/events
     }
 
-    private void PreviousMonth() => CurrentMonth = CurrentMonth.AddMonths(-1);
-    private void NextMonth() => CurrentMonth = CurrentMonth.AddMonths(1);
-
-    private void GoToDay(DateTime date)
+    private async Task LoadPetsAsync()
     {
-        var dayString = date.ToString("yyyy-MM-dd");
-        NavigationManager.NavigateTo($"/dailyreminders/{dayString}");
-    }
-
-    private async Task LoadUserRemindersAsync()
-    {
-        Events.Clear();
-
         var email = AuthService.CurrentUser?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value
                     ?? AuthService.CurrentUser?.Identity?.Name;
 
@@ -85,13 +135,94 @@
         var user = await Db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower());
         if (user == null) return;
 
-        var reminders = await Db.Reminders.AsNoTracking().Where(r => r.UserId == user.Id).ToListAsync();
+        Pets = await Db.Pets.AsNoTracking().Where(p => p.UserId == user.Id).ToListAsync();
+    }
 
-        foreach (var r in reminders)
+    private void PreviousMonth() => CurrentMonth = CurrentMonth.AddMonths(-1);
+    private void NextMonth() => CurrentMonth = CurrentMonth.AddMonths(1);
+
+    private void SelectDay(DateTime date)
+    {
+        SelectedDay = date;
+        NewEventText = string.Empty;
+        SelectedRecurrence = "None";
+        IsFlagged = false;
+        EndDate = null;
+    }
+
+    private void AddEvent()
+    {
+        if (!SelectedDay.HasValue || string.IsNullOrWhiteSpace(NewEventText) || string.IsNullOrWhiteSpace(SelectedPetId))
+            return;
+
+        var pet = Pets.FirstOrDefault(p => p.Id == int.Parse(SelectedPetId));
+        if (pet == null) return;
+
+        DateTime start = SelectedDay.Value.Date;
+        DateTime end = EndDate ?? start;
+
+        TimeSpan interval = SelectedRecurrence switch
         {
-            var key = r.RemindAt.Date;
-            if (!Events.ContainsKey(key)) Events[key] = new List<Reminder>();
-            Events[key].Add(r);
+            "Weekly" => TimeSpan.FromDays(7),
+            "Biweekly" => TimeSpan.FromDays(14),
+            "Monthly" => TimeSpan.FromDays(30),
+            _ => TimeSpan.Zero
+        };
+
+        for (DateTime d = start; d <= end; d = interval == TimeSpan.Zero ? end.AddDays(1) : d.Add(interval))
+        {
+            if (!Events.ContainsKey(d))
+                Events[d] = new List<PetEvent>();
+
+            Events[d].Add(new PetEvent
+            {
+                PetName = pet.Name,
+                Description = NewEventText,
+                IsFlagged = IsFlagged
+            });
+
+            if (interval == TimeSpan.Zero) break;
+        }
+
+        // reset dialog
+        NewEventText = string.Empty;
+        SelectedDay = null;
+        SelectedPetId = null;
+        SelectedRecurrence = "None";
+        IsFlagged = false;
+    }
+
+    // Simple model to store event info in memory
+    private class PetEvent
+    {
+        public string PetName { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public bool IsFlagged { get; set; }
+    }
+
+    // Optional demo seed
+    private async Task LoadSampleDataAsync()
+    {
+        if (!Pets.Any())
+        {
+            Pets.Add(new Pet { Id = 1, UserId = 1, Name = "Butterbean", Breed = "Golden Retriever", Age = 4, Height = 24, Weight = 75, ActivityLevel = ActivityLevel.Medium });
+        }
+
+        var start = DateTime.Today;
+        var end = new DateTime(2025, 12, 21);
+
+        // Butterbean's medicine example
+        for (DateTime d = start; d <= end; d = d.AddDays(7))
+        {
+            if (!Events.ContainsKey(d))
+                Events[d] = new List<PetEvent>();
+
+            Events[d].Add(new PetEvent
+            {
+                PetName = "Butterbean",
+                Description = "Give antibacterial medicine",
+                IsFlagged = true
+            });
         }
     }
 }
