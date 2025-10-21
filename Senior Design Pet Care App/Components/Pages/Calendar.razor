@@ -122,7 +122,7 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadPetsAsync();
-        await LoadSampleDataAsync(); // optional: seeds demo pets/events
+        // await LoadSampleDataAsync(); // Uncomment for demo data for flags and events
     }
 
     private async Task LoadPetsAsync()
@@ -199,6 +199,37 @@
         public string Description { get; set; } = string.Empty;
         public bool IsFlagged { get; set; }
     }
-        
+
+    // Optional demo seed - FOR TESTING PURPOSES ONLY
+    // In a real app, data would come from a database
+    // Remove this method in production once real data loading is implemented
+
+    /*
+    private async Task LoadSampleDataAsync()
+    {
+        if (!Pets.Any())
+        {
+            Pets.Add(new Pet { Id = 1, UserId = 1, Name = "Butterbean", Breed = "Golden Retriever", Age = 4, Height = 24, Weight = 75, ActivityLevel = ActivityLevel.Medium });
+        }
+
+        var start = DateTime.Today;
+        var end = new DateTime(2025, 12, 21);
+
+        // Butterbean's medicine example
+        for (DateTime d = start; d <= end; d = d.AddDays(7))
+        {
+            if (!Events.ContainsKey(d))
+                Events[d] = new List<PetEvent>();
+
+            Events[d].Add(new PetEvent
+            {
+                PetName = "Butterbean",
+                Description = "Give antibacterial medicine",
+                IsFlagged = true
+            });
+        }
     }
+    */
+    
 }
+
