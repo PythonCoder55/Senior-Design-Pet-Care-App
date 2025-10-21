@@ -199,30 +199,6 @@
         public string Description { get; set; } = string.Empty;
         public bool IsFlagged { get; set; }
     }
-
-    // Optional demo seed
-    private async Task LoadSampleDataAsync()
-    {
-        if (!Pets.Any())
-        {
-            Pets.Add(new Pet { Id = 1, UserId = 1, Name = "Butterbean", Breed = "Golden Retriever", Age = 4, Height = 24, Weight = 75, ActivityLevel = ActivityLevel.Medium });
-        }
-
-        var start = DateTime.Today;
-        var end = new DateTime(2025, 12, 21);
-
-        // Butterbean's medicine example
-        for (DateTime d = start; d <= end; d = d.AddDays(7))
-        {
-            if (!Events.ContainsKey(d))
-                Events[d] = new List<PetEvent>();
-
-            Events[d].Add(new PetEvent
-            {
-                PetName = "Butterbean",
-                Description = "Give antibacterial medicine",
-                IsFlagged = true
-            });
-        }
+        
     }
 }
