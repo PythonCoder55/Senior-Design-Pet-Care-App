@@ -35,6 +35,9 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite(conn).EnableSensitiveDataLogging()
 );
 
+// register OpenAI HttpClient + service
+builder.Services.AddHttpClient<IOpenAiService, OpenAiService>();
+
 // Register AuthDataService (now async)
 builder.Services.AddScoped<IAuthDataService, AuthDataService>();
 
