@@ -48,6 +48,10 @@ namespace Senior_Design_Pet_Care_App.Entities
 
         public string? Notes { get; set; }
 
+        //generated advice from OpenAI
+        [MaxLength(4000)]
+        public string? Advice { get; set; }
+
         // convenience properties not mapped are handled at app-level (component will parse CSV)
     }
 }

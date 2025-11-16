@@ -27,6 +27,10 @@ namespace SeniorDesignPetCareApp.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Advice")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Age")
                         .HasColumnType("INTEGER");
 

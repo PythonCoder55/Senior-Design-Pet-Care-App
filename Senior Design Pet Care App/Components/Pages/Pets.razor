@@ -10,6 +10,7 @@
 @inject ApplicationDbContext Db
 @inject IAuthService AuthService
 @inject NavigationManager NavigationManager
+@inject IOpenAiService OpenAiService
 
 @attribute [Authorize]
 
@@ -171,6 +172,29 @@ else
                 <InputTextArea class="form-control" @bind-Value="FormModel.Notes" Rows="3" />
             </div>
 
+            @if (EditingPet != null)
+            {
+                <div class="mt-3">
+                    <button type="button" class="btn btn-info" @onclick="GetAdviceAsync" disabled="@IsGeneratingAdvice">
+                        @(IsGeneratingAdvice ? "Generating..." : "Get Advice")
+                    </button>
+
+                    @if (!string.IsNullOrWhiteSpace(GeneratedAdvice))
+                    {
+                        <div class="mt-2 p-2 border rounded" style="background:#f8f9fa;">
+                            <strong>Generated Advice:</strong>
+                            <div class="mt-1">@((MarkupString)System.Net.WebUtility.HtmlEncode(GeneratedAdvice).Replace("\n", "<br />"))</div>
+                            @* <div class="form-text">Saved to database.</div> *@
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(AdviceStatusMessage))
+                    {
+                        <div class="mt-2 text-muted">@AdviceStatusMessage</div>
+                    }
+                </div>
+            }
+
             <div class="mt-3">
                 <button class="btn btn-success" type="submit">Save</button>
                 @if (EditingPet != null)
@@ -201,11 +225,154 @@ else
     private IBrowserFile? UploadedFile;
     private string? PreviewImageUrl;
 
-    // example dog breeds list (add/remove as you like)
+    private string? GeneratedAdvice;
+    private bool IsGeneratingAdvice = false;
+    private string? AdviceStatusMessage;
+
     private readonly List<string> DogBreeds = new()
     {
-        "Labrador Retriever","German Shepherd","Golden Retriever","French Bulldog","Bulldog",
-        "Poodle","Beagle","Rottweiler","Yorkshire Terrier","Boxer","Other"
+        "Labrador Retriever",
+        "German Shepherd",
+        "Golden Retriever",
+        "French Bulldog",
+        "Bulldog",
+        "Poodle",
+        "Beagle",
+        "Rottweiler",
+        "Yorkshire Terrier",
+        "Boxer",
+        "Dachshund",
+        "Pembroke Welsh Corgi",
+        "Siberian Husky",
+        "Australian Shepherd",
+        "Great Dane",
+        "Doberman Pinscher",
+        "Shih Tzu",
+        "Miniature Schnauzer",
+        "Cavalier King Charles Spaniel",
+        "Pomeranian",
+        "Boston Terrier",
+        "Havanese",
+        "Shetland Sheepdog",
+        "Bernese Mountain Dog",
+        "Cane Corso",
+        "English Springer Spaniel",
+        "Cocker Spaniel",
+        "Mastiff",
+        "Chihuahua",
+        "Great Pyrenees",
+        "Brittany",
+        "Border Collie",
+        "Vizsla",
+        "Basset Hound",
+        "Weimaraner",
+        "Newfoundland",
+        "West Highland White Terrier",
+        "Belgian Malinois",
+        "Rhodesian Ridgeback",
+        "Collie",
+        "Bloodhound",
+        "Akita",
+        "Alaskan Malamute",
+        "Whippet",
+        "Scottish Terrier",
+        "Chinese Shar-Pei",
+        "Samoyed",
+        "Saint Bernard",
+        "Bullmastiff",
+        "Papillon",
+        "Chow Chow",
+        "Australian Cattle Dog",
+        "Lhasa Apso",
+        "Irish Setter",
+        "Airedale Terrier",
+        "Portuguese Water Dog",
+        "Shiba Inu",
+        "Maltese",
+        "Greyhound",
+        "Rat Terrier",
+        "Anatolian Shepherd Dog",
+        "Pointer",
+        "American Eskimo Dog",
+        "Toy Poodle",
+        "Standard Schnauzer",
+        "Keeshond",
+        "Old English Sheepdog",
+        "Basenji",
+        "Neapolitan Mastiff",
+        "Beauceron",
+        "Manchester Terrier",
+        "American Staffordshire Terrier",
+        "Staffordshire Bull Terrier",
+        "Norwich Terrier",
+        "Norfolk Terrier",
+        "Italian Greyhound",
+        "Belgian Tervuren",
+        "Belgian Sheepdog",
+        "Spinone Italiano",
+        "Wirehaired Pointing Griffon",
+        "Clumber Spaniel",
+        "Tibetan Mastiff",
+        "Tibetan Spaniel",
+        "Tibetan Terrier",
+        "Saluki",
+        "Afghan Hound",
+        "Borzoi",
+        "Pharaoh Hound",
+        "Irish Wolfhound",
+        "Giant Schnauzer",
+        "Japanese Chin",
+        "Japanese Spitz",
+        "Kerry Blue Terrier",
+        "Soft-Coated Wheaten Terrier",
+        "Bedlington Terrier",
+        "Sealyham Terrier",
+        "Lakeland Terrier",
+        "Fox Terrier",
+        "Welsh Terrier",
+        "Glen of Imaal Terrier",
+        "Bull Terrier",
+        "Miniature Bull Terrier",
+        "Schipperke",
+        "Pekingese",
+        "Brussels Griffon",
+        "French Spaniel",
+        "English Setter",
+        "Finnish Spitz",
+        "Kuvasz",
+        "Puli",
+        "Komondor",
+        "Icelandic Sheepdog",
+        "Norwegian Elkhound",
+        "Swedish Vallhund",
+        "Pyrenean Shepherd",
+        "Leonberger",
+        "Boerboel",
+        "English Cocker Spaniel",
+        "Field Spaniel",
+        "Boykin Spaniel",
+        "American Water Spaniel",
+        "Nova Scotia Duck Tolling Retriever",
+        "Flat-Coated Retriever",
+        "Curly-Coated Retriever",
+        "American Foxhound",
+        "Harrier",
+        "Redbone Coonhound",
+        "Black and Tan Coonhound",
+        "Bluetick Coonhound",
+        "Treeing Walker Coonhound",
+        "Plott Hound",
+        "Otterhound",
+        "Irish Terrier",
+        "German Shorthaired Pointer",
+        "German Wirehaired Pointer",
+        "Bouvier des Flandres",
+        "Catahoula Leopard Dog",
+        "American Pit Bull Terrier",
+        "Entlebucher Mountain Dog",
+        "Greater Swiss Mountain Dog",
+        "Appenzeller Sennenhund",
+        "Other"
     };
 
     protected override async Task OnInitializedAsync()
@@ -252,6 +419,7 @@ else
         MedicationsList.Clear();
         UploadedFile = null;
         PreviewImageUrl = null;
+        GeneratedAdvice = null;
         ShowForm = true;
     }
 
@@ -272,6 +440,7 @@ else
 
         FoodsList = ParseCsv(pet.FoodsCsv);
         MedicationsList = ParseCsv(pet.MedicationsCsv);
+        GeneratedAdvice = pet.Advice;
 
         if (pet.PictureData != null && pet.PictureData.Length > 0)
         {
@@ -308,7 +477,8 @@ else
                 FoodsCsv = JoinCsv(FoodsList),
                 MedicationsCsv = JoinCsv(MedicationsList),
                 MostRecentVetAppointment = FormModel.MostRecentVetAppointment,
-                Notes = string.IsNullOrWhiteSpace(FormModel.Notes) ? null : FormModel.Notes
+                Notes = string.IsNullOrWhiteSpace(FormModel.Notes) ? null : FormModel.Notes,
+                Advice = GeneratedAdvice
             };
 
             if (UploadedFile != null)
@@ -348,7 +518,8 @@ else
                 Notes = string.IsNullOrWhiteSpace(FormModel.Notes) ? null : FormModel.Notes,
                 PictureData = UploadedFile != null
                     ? await ReadFileToBytesAsync(UploadedFile)
-                    : EditingPet.PictureData
+                    : EditingPet.PictureData,
+                Advice = GeneratedAdvice
             };
 
             Db.Pets.Update(petToUpdate);
@@ -467,6 +638,113 @@ else
         if (list == null || list.Count == 0) return null;
         return string.Join(';', list.Select(s => s.Trim()));
     }
+
+    private async Task GetAdviceAsync()
+    {
+        AdviceStatusMessage = null;
+        GeneratedAdvice = null;
+
+        // Basic validation: name is required in the form model
+        if (string.IsNullOrWhiteSpace(FormModel.Name))
+        {
+            AdviceStatusMessage = "Please enter a pet name before requesting advice.";
+            return;
+        }
+
+        IsGeneratingAdvice = true;
+
+        try
+        {
+            // If EditingPet is null, create a DB pet first so we have an entity to attach advice to.
+            if (EditingPet == null)
+            {
+                var email = AuthService.CurrentUser?.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email)?.Value
+                            ?? AuthService.CurrentUser?.Identity?.Name;
+                if (string.IsNullOrWhiteSpace(email))
+                {
+                    AdviceStatusMessage = "Unable to determine current user.";
+                    return;
+                }
+
+                var user = await Db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower());
+                if (user == null)
+                {
+                    AdviceStatusMessage = "Current user not found.";
+                    return;
+                }
+
+                var newPet = new Entities.Pet
+                {
+                    UserId = user.Id,
+                    Name = FormModel.Name?.Trim() ?? "",
+                    Breed = FormModel.Breed ?? "",
+                    Age = FormModel.Age,
+                    Height = FormModel.Height,
+                    Weight = FormModel.Weight,
+                    ActivityLevel = FormModel.ActivityLevel,
+                    FoodsCsv = JoinCsv(FoodsList),
+                    MedicationsCsv = JoinCsv(MedicationsList),
+                    MostRecentVetAppointment = FormModel.MostRecentVetAppointment,
+                    Notes = string.IsNullOrWhiteSpace(FormModel.Notes) ? null : FormModel.Notes,
+                    PictureData = UploadedFile != null ? await ReadFileToBytesAsync(UploadedFile) : null
+                };
+
+                Db.Pets.Add(newPet);
+                await Db.SaveChangesAsync();
+
+                EditingPet = newPet;
+                await LoadPetsAsync(); // refresh lists
+            }
+
+            // Build advice with all form data. Use EditingPet (which should now exist) and the current form values.
+            var adviceText = await OpenAiService.GeneratePetAdviceAsync(
+                petName: FormModel.Name ?? EditingPet?.Name ?? "",
+                breed: FormModel.Breed ?? EditingPet?.Breed ?? "",
+                age: FormModel.Age,
+                height: FormModel.Height,
+                weight: FormModel.Weight,
+                activityLevel: FormModel.ActivityLevel.ToString(),
+                foodsCsv: JoinCsv(FoodsList),
+                medsCsv: JoinCsv(MedicationsList),
+                mostRecentVetAppointment: FormModel.MostRecentVetAppointment,
+                notes: FormModel.Notes
+            );
+
+            // Save advice to DB (update the pet entity)
+            // Detach tracked instance if any
+            var local = Db.Pets.Local.FirstOrDefault(p => p.Id == EditingPet.Id);
+            if (local != null)
+                Db.Entry(local).State = EntityState.Detached;
+
+            var petToUpdate = await Db.Pets.FirstOrDefaultAsync(p => p.Id == EditingPet.Id);
+            if (petToUpdate == null)
+            {
+                AdviceStatusMessage = "Failed to locate pet in DB to save advice.";
+                GeneratedAdvice = adviceText;
+                return;
+            }
+
+            petToUpdate.Advice = adviceText;
+            Db.Pets.Update(petToUpdate);
+            await Db.SaveChangesAsync();
+
+            // Update local state to show advice
+            GeneratedAdvice = adviceText;
+            AdviceStatusMessage = "Advice saved.";
+            // if you're editing again afterwards, make sure EditingPet shows new advice
+            EditingPet.Advice = adviceText;
+        }
+        catch (Exception ex)
+        {
+            AdviceStatusMessage = $"Failed to generate advice: {ex.Message}";
+        }
+        finally
+        {
+            IsGeneratingAdvice = false;
+            StateHasChanged();
+        }
+    }
+
 
     // form DTO to avoid EF tracked entity binding
     private class PetFormModel
