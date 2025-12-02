@@ -12,7 +12,7 @@
 
 @attribute [Authorize]
 
-<h3>Calendar</h3>
+<h3>Pet Care Calendar</h3>
 
 <div class="calendar-container">
     <div class="calendar-header mb-2">
@@ -35,15 +35,21 @@
         @for (int day = 1; day <= DaysInMonth; day++)
         {
             var date = new DateTime(CurrentMonth.Year, CurrentMonth.Month, day);
-            <div class="calendar-day" @onclick="() => GoToDay(date)">
+            <div class="calendar-day" @onclick="() => SelectDay(date)">
                 <div class="date-number">@day</div>
 
                 @if (Events.TryGetValue(date.Date, out var list))
                 {
-                    foreach (var ev in list.OrderBy(r => r.RemindAt.TimeOfDay))
+                    foreach (var ev in list.OrderBy(e => e.RemindAt.TimeOfDay))
                     {
                         <div class="event" title="@ev.Description">
-                            @ev.Title
+                            <strong>@(string.IsNullOrWhiteSpace(ev.PetName) ? ev.Title : $"{ev.PetName}:")</strong>
+                            @if (!string.IsNullOrWhiteSpace(ev.PetName)) { <text> </text> }
+                            @ev.Description
+                            @if (ev.IsFlagged)
+                            {
+                                <span class="badge bg-danger ms-1">Flagged</span>
+                            }
                         </div>
                     }
                 }
@@ -52,27 +58,103 @@
     </div>
 </div>
 
+@if (SelectedDay.HasValue)
+{
+    <div class="event-dialog mt-3 p-3 border rounded">
+        <h4>Add Pet Reminder — @SelectedDay.Value.ToString("D")</h4>
+
+        <div class="mb-2">
+            <label class="form-label">Select Pet</label>
+            <select class="form-select" @bind="SelectedPetId">
+                <option value="">-- Select a pet --</option>
+                @foreach (var p in Pets)
+                {
+                    <option value="@p.Id">@p.Name (@p.Breed)</option>
+                }
+            </select>
+        </div>
+
+        <div class="mb-2">
+            <label class="form-label">Title</label>
+            <input @bind="NewEventTitle" class="form-control" placeholder="Short title (e.g. Medicine)" />
+        </div>
+
+        <div class="mb-2">
+            <label class="form-label">Description</label>
+            <input @bind="NewEventText" class="form-control" placeholder="e.g. Give medicine, vet visit, etc." />
+        </div>
+
+        <div class="mb-2">
+            <label class="form-label">End Date</label>
+            <InputDate class="form-control" @bind-Value="EndDate" />
+            <div class="form-text">Leave blank for single occurrence.</div>
+        </div>
+
+        <div class="mb-2">
+            <label class="form-label">Recurrence</label>
+            <select class="form-select" @bind="SelectedRecurrence">
+                <option value="None">None</option>
+                <option value="Weekly">Weekly</option>
+                <option value="Biweekly">Biweekly</option>
+                <option value="Monthly">Monthly</option>
+            </select>
+        </div>
+
+        <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" @bind="IsFlagged" id="flagCheck" />
+            <label class="form-check-label" for="flagCheck">Flag as important (e.g. medication, vet issue)</label>
+        </div>
+
+        <div class="mt-3">
+            <button class="btn btn-primary me-2" @onclick="AddEvent">Add</button>
+            <button class="btn btn-secondary" @onclick="() => SelectedDay = null">Close</button>
+        </div>
+    </div>
+}
+
 @code {
+    // UI state
     private DateTime CurrentMonth { get; set; } = DateTime.Today;
-    private Dictionary<DateTime, List<Reminder>> Events { get; set; } = new();
+    private Dictionary<DateTime, List<CalendarItem>> Events { get; set; } = new();
     private string[] DayNames = CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames;
     private int DaysInMonth => DateTime.DaysInMonth(CurrentMonth.Year, CurrentMonth.Month);
     private int FirstDayOffset => (int)new DateTime(CurrentMonth.Year, CurrentMonth.Month, 1).DayOfWeek;
 
+    // Selection / form state
+    private DateTime? SelectedDay;
+    private string? NewEventText;
+    private string? NewEventTitle;
+    private string? SelectedRecurrence = "None";
+    private bool IsFlagged = false;
+    private DateTime? EndDate;
+    private List<Pet> Pets = new();
+    private string? SelectedPetId;
+
+    // helper day names
+    private string[] DayNamesAlt = CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames;
+
+    // Lifecycle
     protected override async Task OnInitializedAsync()
     {
+        await LoadPetsAsync();
         await LoadUserRemindersAsync();
     }
 
-    private void PreviousMonth() => CurrentMonth = CurrentMonth.AddMonths(-1);
-    private void NextMonth() => CurrentMonth = CurrentMonth.AddMonths(1);
-
-    private void GoToDay(DateTime date)
+    // Load pets for the current user (for the add dialog)
+    private async Task LoadPetsAsync()
     {
-        var dayString = date.ToString("yyyy-MM-dd");
-        NavigationManager.NavigateTo($"/dailyreminders/{dayString}");
+        var email = AuthService.CurrentUser?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value
+                    ?? AuthService.CurrentUser?.Identity?.Name;
+
+        if (string.IsNullOrWhiteSpace(email)) return;
+
+        var user = await Db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower());
+        if (user == null) return;
+
+        Pets = await Db.Pets.AsNoTracking().Where(p => p.UserId == user.Id).ToListAsync();
     }
 
+    // Load persisted reminders and convert them to CalendarItem
     private async Task LoadUserRemindersAsync()
     {
         Events.Clear();
@@ -90,8 +172,105 @@
         foreach (var r in reminders)
         {
             var key = r.RemindAt.Date;
-            if (!Events.ContainsKey(key)) Events[key] = new List<Reminder>();
-            Events[key].Add(r);
+            if (!Events.ContainsKey(key)) Events[key] = new List<CalendarItem>();
+
+            // Map DB Reminder -> CalendarItem (in case Reminder has different fields, adjust here)
+            Events[key].Add(new CalendarItem
+            {
+                Source = CalendarItemSource.Database,
+                ReminderId = r.Id,
+                Title = r.Title ?? string.Empty,
+                Description = r.Description ?? string.Empty,
+                RemindAt = r.RemindAt,
+                PetName = r.PetId.HasValue ? (Db.Pets.Find(r.PetId.Value)?.Name ?? string.Empty) : string.Empty,
+                IsFlagged = false // DB model doesn't have IsFlagged in Option A; default false
+            });
         }
+    }
+
+    private void PreviousMonth() => CurrentMonth = CurrentMonth.AddMonths(-1);
+    private void NextMonth() => CurrentMonth = CurrentMonth.AddMonths(1);
+
+    private void SelectDay(DateTime date)
+    {
+        SelectedDay = date;
+        NewEventText = string.Empty;
+        NewEventTitle = string.Empty;
+        SelectedRecurrence = "None";
+        IsFlagged = false;
+        EndDate = null;
+        SelectedPetId = null;
+    }
+
+    // Add event(s) in-memory only (Option A)
+    private void AddEvent()
+    {
+        if (!SelectedDay.HasValue
+            || string.IsNullOrWhiteSpace(NewEventText)
+            || string.IsNullOrWhiteSpace(SelectedPetId))
+            return;
+
+        // Resolve pet name from pets list
+        var pid = int.Parse(SelectedPetId);
+        var pet = Pets.FirstOrDefault(p => p.Id == pid);
+        if (pet == null) return;
+
+        DateTime start = SelectedDay.Value.Date;
+        DateTime end = EndDate ?? start;
+
+        TimeSpan interval = SelectedRecurrence switch
+        {
+            "Weekly" => TimeSpan.FromDays(7),
+            "Biweekly" => TimeSpan.FromDays(14),
+            "Monthly" => TimeSpan.FromDays(30),
+            _ => TimeSpan.Zero
+        };
+
+        // Generate occurrences in-memory
+        for (DateTime d = start; d <= end; d = interval == TimeSpan.Zero ? d.AddDays(1) : d.Add(interval))
+        {
+            if (!Events.ContainsKey(d))
+                Events[d] = new List<CalendarItem>();
+
+            Events[d].Add(new CalendarItem
+            {
+                Source = CalendarItemSource.Memory,
+                ReminderId = null,
+                Title = NewEventTitle ?? string.Empty,
+                Description = NewEventText ?? string.Empty,
+                RemindAt = d,
+                PetName = pet.Name,
+                IsFlagged = IsFlagged
+            });
+
+            if (interval == TimeSpan.Zero) break;
+        }
+
+        // Reset dialog
+        NewEventText = string.Empty;
+        NewEventTitle = string.Empty;
+        SelectedDay = null;
+        SelectedPetId = null;
+        SelectedRecurrence = "None";
+        IsFlagged = false;
+        EndDate = null;
+    }
+
+    // Unified display model for both DB and in-memory events
+    private class CalendarItem
+    {
+        public CalendarItemSource Source { get; set; }
+        public int? ReminderId { get; set; } // populated for DB items
+        public string PetName { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public DateTime RemindAt { get; set; } = DateTime.Today;
+        public bool IsFlagged { get; set; }
+    }
+
+    private enum CalendarItemSource
+    {
+        Database,
+        Memory
     }
 }
