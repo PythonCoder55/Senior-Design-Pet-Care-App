@@ -182,7 +182,7 @@
                 Title = r.Title ?? string.Empty,
                 Description = r.Description ?? string.Empty,
                 RemindAt = r.RemindAt,
-                PetName = r.PetId.HasValue ? (Db.Pets.Find(r.PetId.Value)?.Name ?? string.Empty) : string.Empty,
+                PetName = string.Empty,
                 IsFlagged = false // DB model doesn't have IsFlagged in Option A; default false
             });
         }
