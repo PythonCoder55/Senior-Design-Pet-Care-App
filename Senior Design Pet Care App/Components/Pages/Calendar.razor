@@ -15,10 +15,14 @@
 <h3>Calendar</h3>
 
 <div class="calendar-container">
-    <div class="calendar-header mb-2">
+    <div class="calendar-header mb-2 d-flex align-items-center">
         <button class="btn btn-sm btn-secondary me-2" @onclick="PreviousMonth">←</button>
-        <strong>@CurrentMonth.ToString("MMMM yyyy")</strong>
-        <button class="btn btn-sm btn-secondary ms-2" @onclick="NextMonth">→</button>
+        <strong class="me-2">@CurrentMonth.ToString("MMMM yyyy")</strong>
+        <button class="btn btn-sm btn-secondary" @onclick="NextMonth">→</button>
+
+        <button class="btn btn-sm btn-primary ms-auto" @onclick="OpenAddForm">
+            + Add Event
+        </button>
     </div>
 
     <div class="calendar-grid">
@@ -52,12 +56,60 @@
     </div>
 </div>
 
+@if (ShowForm)
+{
+    <div class="modal d-block" tabindex="-1" role="dialog" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New Event</h5>
+                    <button type="button" class="btn-close" @onclick="CancelForm"></button>
+                </div>
+                <div class="modal-body">
+                    <label>Title</label>
+                    <input class="form-control mb-2" @bind="FormTitle" placeholder="e.g. Vet Visit" />
+
+                    <label>Date</label>
+                    <input type="date" class="form-control mb-2" @bind="FormDate" />
+
+                    <label>Time</label>
+                    <input type="time" class="form-control mb-2" @bind="FormTime" />
+
+                    <label>Type</label>
+                    <select class="form-control mb-2" @bind="FormTypeString">
+                        @foreach (ReminderType t in Enum.GetValues(typeof(ReminderType)))
+                        {
+                            <option value="@t">@t.ToString()</option>
+                        }
+                    </select>
+
+                    <label>Description</label>
+                    <textarea class="form-control mb-2" rows="2" @bind="FormDescription"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CancelForm">Cancel</button>
+                    <button class="btn btn-success" @onclick="SaveEvent">Save Event</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private DateTime CurrentMonth { get; set; } = DateTime.Today;
     private Dictionary<DateTime, List<Reminder>> Events { get; set; } = new();
     private string[] DayNames = CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames;
     private int DaysInMonth => DateTime.DaysInMonth(CurrentMonth.Year, CurrentMonth.Month);
     private int FirstDayOffset => (int)new DateTime(CurrentMonth.Year, CurrentMonth.Month, 1).DayOfWeek;
+
+    // --- NEW: Form State Variables ---
+    private bool ShowForm = false;
+    private string FormTitle = string.Empty;
+    private string FormDescription = string.Empty;
+    private DateTime FormDate = DateTime.Today; // Needed because Calendar can add for any day
+    private TimeOnly FormTime = TimeOnly.FromDateTime(DateTime.Now);
+    private string FormTypeString = ReminderType.Other.ToString();
+    // ----------------------------------
 
     protected override async Task OnInitializedAsync()
     {
@@ -93,5 +145,56 @@
             if (!Events.ContainsKey(key)) Events[key] = new List<Reminder>();
             Events[key].Add(r);
         }
+    }
+
+    // --- NEW: Form Logic ---
+
+    private void OpenAddForm()
+    {
+        // Reset form to defaults
+        FormTitle = "";
+        FormDescription = "";
+        FormDate = DateTime.Today;
+        FormTime = TimeOnly.FromDateTime(DateTime.Now);
+        FormTypeString = ReminderType.Other.ToString();
+        ShowForm = true;
+    }
+
+    private void CancelForm()
+    {
+        ShowForm = false;
+    }
+
+    private async Task SaveEvent()
+    {
+        // 1. Get User
+        var email = AuthService.CurrentUser?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value
+                    ?? AuthService.CurrentUser?.Identity?.Name;
+
+        if (string.IsNullOrWhiteSpace(email)) return;
+
+        var user = await Db.Users.FirstAsync(u => u.Email.ToLower() == email.ToLower());
+
+        // 2. Process Data
+        var fullDateTime = FormDate.Date + FormTime.ToTimeSpan();
+        Enum.TryParse(FormTypeString, out ReminderType parsedType);
+
+        // 3. Create Entity
+        var reminder = new Reminder
+        {
+            UserId = user.Id,
+            Title = FormTitle,
+            Description = string.IsNullOrWhiteSpace(FormDescription) ? null : FormDescription,
+            RemindAt = fullDateTime,
+            Type = parsedType
+        };
+
+        // 4. Save to DB
+        Db.Reminders.Add(reminder);
+        await Db.SaveChangesAsync();
+
+        // 5. Refresh Calendar & Close Form
+        await LoadUserRemindersAsync(); // Reloads the dots/text on the calendar grid
+        ShowForm = false;
     }
 }
