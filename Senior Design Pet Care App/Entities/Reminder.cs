@@ -14,6 +14,15 @@ namespace Senior_Design_Pet_Care_App.Entities
         Other
     }
 
+    public enum RecurrenceType
+    {
+        None,
+        Daily,
+        Weekly,
+        Monthly,
+        Yearly
+    }
+
     public class Reminder
     {
         [Key]
@@ -33,7 +42,13 @@ namespace Senior_Design_Pet_Care_App.Entities
 
         public ReminderType Type { get; set; } = ReminderType.Other;
 
-        // Optional navigation property
-        // public User? User { get; set; }
+        // Links recurring events together so they can be edited/deleted as a group
+        public Guid? SeriesId { get; set; }
+
+        // --- NEW: Pet Link ---
+        public int? PetId { get; set; }
+
+        [ForeignKey("PetId")]
+        public Pet? Pet { get; set; }
     }
 }

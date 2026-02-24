@@ -35,7 +35,18 @@ else
                 <div>
                     <strong>@reminder.RemindAt.ToString("t")</strong>
                     <span class="ms-2">@reminder.Title</span>
+
+                    @if (reminder.Pet != null)
+                    {
+                        <span class="badge bg-primary ms-2"><i class="bi bi-suit-heart-fill me-1"></i>@reminder.Pet.Name</span>
+                    }
+
                     <span class="badge bg-secondary ms-2">@reminder.Type</span>
+
+                    @if (reminder.SeriesId.HasValue)
+                    {
+                        <span class="badge bg-info ms-2" title="Recurring Event">↻</span>
+                    }
                 </div>
                 <span class="text-muted small">Edit</span>
             </li>
@@ -71,13 +82,48 @@ else
                     <label>Time</label>
                     <input type="time" class="form-control mb-2" @bind="FormTime" />
 
-                    <label>Type</label>
+                    <label>Event Type</label>
                     <select class="form-control mb-2" @bind="FormTypeString">
                         @foreach (ReminderType t in Enum.GetValues(typeof(ReminderType)))
                         {
                             <option value="@t">@t.ToString()</option>
                         }
                     </select>
+
+                    <label>Pet</label>
+                    <select class="form-control mb-2" @bind="FormPetIdString">
+                        <option value="">N/A (No Pet)</option>
+                        @foreach (var pet in UserPets)
+                        {
+                            <option value="@pet.Id">@pet.Name</option>
+                        }
+                    </select>
+
+                    @if (EditingReminder == null)
+                    {
+                        <label>Recurrence</label>
+                        <select class="form-control mb-2" @bind="FormRecurrenceString">
+                            @foreach (RecurrenceType r in Enum.GetValues(typeof(RecurrenceType)))
+                            {
+                                <option value="@r">@r.ToString()</option>
+                            }
+                        </select>
+
+                        @if (FormRecurrenceString != RecurrenceType.None.ToString())
+                        {
+                            <label>Repeat Until</label>
+                            <input type="date" class="form-control mb-2" @bind="FormRecurrenceEndDate" />
+                        }
+                    }
+                    else if (EditingReminder.SeriesId.HasValue)
+                    {
+                        <div class="form-check mt-3 mb-2 p-3 bg-light border rounded">
+                            <input class="form-check-input ms-1" type="checkbox" id="updateSeriesCheck" @bind="ApplyToEntireSeries">
+                            <label class="form-check-label ms-4 fw-bold text-primary" for="updateSeriesCheck">
+                                Apply Edit/Delete to all future occurrences in this series?
+                            </label>
+                        </div>
+                    }
 
                     <label>Description</label>
                     <textarea class="form-control mb-2" rows="2" @bind="FormDescription"></textarea>
@@ -105,6 +151,7 @@ else
     [Parameter] public string dateString { get; set; } = string.Empty;
     private DateTime SelectedDate;
     private List<Reminder> Reminders = new();
+    private List<Pet> UserPets = new();
 
     private bool ShowForm = false;
     private Reminder? EditingReminder;
@@ -113,6 +160,12 @@ else
     private string FormDescription = string.Empty;
     private TimeOnly FormTime = TimeOnly.FromDateTime(DateTime.Now);
     private string FormTypeString = ReminderType.Other.ToString();
+    private string FormPetIdString = string.Empty;
+
+    // Recurrence / Series logic
+    private string FormRecurrenceString = RecurrenceType.None.ToString();
+    private DateTime FormRecurrenceEndDate = DateTime.Today.AddMonths(1);
+    private bool ApplyToEntireSeries = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -122,10 +175,22 @@ else
         }
         else
         {
-            // Fallback if URL is bad
             SelectedDate = DateTime.Today;
         }
+        await LoadUserPetsAsync();
         await LoadRemindersAsync();
+    }
+
+    private async Task LoadUserPetsAsync()
+    {
+        var email = AuthService.CurrentUser?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value
+                    ?? AuthService.CurrentUser?.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(email)) return;
+
+        var user = await Db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower());
+        if (user == null) return;
+
+        UserPets = await Db.Pets.AsNoTracking().Where(p => p.UserId == user.Id).ToListAsync();
     }
 
     private async Task LoadRemindersAsync()
@@ -138,6 +203,7 @@ else
         if (user == null) return;
 
         Reminders = await Db.Reminders
+            .Include(r => r.Pet)
             .AsNoTracking()
             .Where(r => r.UserId == user.Id && r.RemindAt.Date == SelectedDate.Date)
             .OrderBy(r => r.RemindAt)
@@ -151,6 +217,10 @@ else
         FormDescription = "";
         FormTime = TimeOnly.FromDateTime(DateTime.Now);
         FormTypeString = ReminderType.Other.ToString();
+        FormPetIdString = "";
+        FormRecurrenceString = RecurrenceType.None.ToString();
+        FormRecurrenceEndDate = SelectedDate.AddMonths(1);
+        ApplyToEntireSeries = false;
         ShowForm = true;
     }
 
@@ -161,6 +231,8 @@ else
         FormDescription = reminder.Description ?? "";
         FormTime = TimeOnly.FromDateTime(reminder.RemindAt);
         FormTypeString = reminder.Type.ToString();
+        FormPetIdString = reminder.PetId?.ToString() ?? "";
+        ApplyToEntireSeries = false; // default to false
         ShowForm = true;
     }
 
@@ -171,19 +243,43 @@ else
 
         var user = await Db.Users.FirstAsync(u => u.Email.ToLower() == email.ToLower());
 
-        var remindAt = SelectedDate.Date + FormTime.ToTimeSpan();
         Enum.TryParse(FormTypeString, out ReminderType parsedType);
+        Enum.TryParse(FormRecurrenceString, out RecurrenceType parsedRecurrence);
 
-        var reminder = new Reminder
+        int? parsedPetId = string.IsNullOrEmpty(FormPetIdString) ? null : int.Parse(FormPetIdString);
+
+        var baseTime = FormTime.ToTimeSpan();
+        var currentDate = SelectedDate.Date;
+        var endDate = parsedRecurrence == RecurrenceType.None ? currentDate : FormRecurrenceEndDate.Date;
+        if (endDate > currentDate.AddYears(5)) endDate = currentDate.AddYears(5);
+
+        var seriesId = parsedRecurrence != RecurrenceType.None ? Guid.NewGuid() : (Guid?)null;
+        var remindersToInsert = new List<Reminder>();
+
+        while (currentDate <= endDate)
         {
-            UserId = user.Id,
-            Title = FormTitle,
-            Description = string.IsNullOrWhiteSpace(FormDescription) ? null : FormDescription,
-            RemindAt = remindAt,
-            Type = parsedType
-        };
+            remindersToInsert.Add(new Reminder
+            {
+                UserId = user.Id,
+                PetId = parsedPetId,
+                Title = FormTitle,
+                Description = string.IsNullOrWhiteSpace(FormDescription) ? null : FormDescription,
+                RemindAt = currentDate + baseTime,
+                Type = parsedType,
+                SeriesId = seriesId
+            });
 
-        Db.Reminders.Add(reminder);
+            currentDate = parsedRecurrence switch
+            {
+                RecurrenceType.Daily => currentDate.AddDays(1),
+                RecurrenceType.Weekly => currentDate.AddDays(7),
+                RecurrenceType.Monthly => currentDate.AddMonths(1),
+                RecurrenceType.Yearly => currentDate.AddYears(1),
+                _ => DateTime.MaxValue
+            };
+        }
+
+        Db.Reminders.AddRange(remindersToInsert);
         await Db.SaveChangesAsync();
 
         await LoadRemindersAsync();
@@ -194,20 +290,39 @@ else
     {
         if (EditingReminder == null) return;
 
-        // Re-fetch to ensure we are attached to context, or simply update logic if tracking is enabled.
-        // Best practice to attach or fetch fresh if utilizing AsNoTracking elsewhere.
-        // For simplicity here, we assume standard EF usage.
-
         Enum.TryParse(FormTypeString, out ReminderType parsedType);
+        int? parsedPetId = string.IsNullOrEmpty(FormPetIdString) ? null : int.Parse(FormPetIdString);
 
-        EditingReminder.Title = FormTitle;
-        EditingReminder.Description = string.IsNullOrWhiteSpace(FormDescription) ? null : FormDescription;
-        EditingReminder.RemindAt = SelectedDate.Date + FormTime.ToTimeSpan();
-        EditingReminder.Type = parsedType;
+        if (ApplyToEntireSeries && EditingReminder.SeriesId.HasValue)
+        {
+            var seriesItems = await Db.Reminders
+                .Where(r => r.SeriesId == EditingReminder.SeriesId.Value && r.RemindAt.Date >= SelectedDate.Date)
+                .ToListAsync();
 
-        Db.Reminders.Update(EditingReminder);
+            foreach (var item in seriesItems)
+            {
+                item.Title = FormTitle;
+                item.Description = string.IsNullOrWhiteSpace(FormDescription) ? null : FormDescription;
+                item.Type = parsedType;
+                item.PetId = parsedPetId;
+                item.RemindAt = item.RemindAt.Date + FormTime.ToTimeSpan();
+            }
+        }
+        else
+        {
+            var trackedReminder = await Db.Reminders.FindAsync(EditingReminder.Id);
+
+            if (trackedReminder != null)
+            {
+                trackedReminder.Title = FormTitle;
+                trackedReminder.Description = string.IsNullOrWhiteSpace(FormDescription) ? null : FormDescription;
+                trackedReminder.RemindAt = SelectedDate.Date + FormTime.ToTimeSpan();
+                trackedReminder.Type = parsedType;
+                trackedReminder.PetId = parsedPetId;
+            }
+        }
+
         await Db.SaveChangesAsync();
-
         await LoadRemindersAsync();
         ShowForm = false;
     }
@@ -216,9 +331,24 @@ else
     {
         if (EditingReminder == null) return;
 
-        Db.Reminders.Remove(EditingReminder);
-        await Db.SaveChangesAsync();
+        if (ApplyToEntireSeries && EditingReminder.SeriesId.HasValue)
+        {
+            var seriesItems = await Db.Reminders
+                .Where(r => r.SeriesId == EditingReminder.SeriesId.Value && r.RemindAt.Date >= SelectedDate.Date)
+                .ToListAsync();
+            Db.Reminders.RemoveRange(seriesItems);
+        }
+        else
+        {
+            var trackedReminder = await Db.Reminders.FindAsync(EditingReminder.Id);
 
+            if (trackedReminder != null)
+            {
+                Db.Reminders.Remove(trackedReminder);
+            }
+        }
+
+        await Db.SaveChangesAsync();
         await LoadRemindersAsync();
         ShowForm = false;
     }

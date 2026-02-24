@@ -48,6 +48,8 @@
                     {
                         <div class="event" title="@ev.Description">
                             @ev.Title
+                            @(ev.Pet != null ? $" ({ev.Pet.Name})" : "")
+                            @(ev.SeriesId.HasValue ? " ↻" : "")
                         </div>
                     }
                 }
@@ -69,19 +71,47 @@
                     <label>Title</label>
                     <input class="form-control mb-2" @bind="FormTitle" placeholder="e.g. Vet Visit" />
 
-                    <label>Date</label>
-                    <input type="date" class="form-control mb-2" @bind="FormDate" />
+                    <div class="row">
+                        <div class="col">
+                            <label>Date</label>
+                            <input type="date" class="form-control mb-2" @bind="FormDate" />
+                        </div>
+                        <div class="col">
+                            <label>Time</label>
+                            <input type="time" class="form-control mb-2" @bind="FormTime" />
+                        </div>
+                    </div>
 
-                    <label>Time</label>
-                    <input type="time" class="form-control mb-2" @bind="FormTime" />
-
-                    <label>Type</label>
+                    <label>Event Type</label>
                     <select class="form-control mb-2" @bind="FormTypeString">
                         @foreach (ReminderType t in Enum.GetValues(typeof(ReminderType)))
                         {
                             <option value="@t">@t.ToString()</option>
                         }
                     </select>
+
+                    <label>Pet</label>
+                    <select class="form-control mb-2" @bind="FormPetIdString">
+                        <option value="">N/A (No Pet)</option>
+                        @foreach (var pet in UserPets)
+                        {
+                            <option value="@pet.Id">@pet.Name</option>
+                        }
+                    </select>
+
+                    <label>Recurrence</label>
+                    <select class="form-control mb-2" @bind="FormRecurrenceString">
+                        @foreach (RecurrenceType r in Enum.GetValues(typeof(RecurrenceType)))
+                        {
+                            <option value="@r">@r.ToString()</option>
+                        }
+                    </select>
+
+                    @if (FormRecurrenceString != RecurrenceType.None.ToString())
+                    {
+                        <label>Repeat Until</label>
+                        <input type="date" class="form-control mb-2" @bind="FormRecurrenceEndDate" />
+                    }
 
                     <label>Description</label>
                     <textarea class="form-control mb-2" rows="2" @bind="FormDescription"></textarea>
@@ -98,31 +128,56 @@
 @code {
     private DateTime CurrentMonth { get; set; } = DateTime.Today;
     private Dictionary<DateTime, List<Reminder>> Events { get; set; } = new();
+    private List<Pet> UserPets { get; set; } = new();
     private string[] DayNames = CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames;
     private int DaysInMonth => DateTime.DaysInMonth(CurrentMonth.Year, CurrentMonth.Month);
     private int FirstDayOffset => (int)new DateTime(CurrentMonth.Year, CurrentMonth.Month, 1).DayOfWeek;
 
-    // --- NEW: Form State Variables ---
+    // --- Form State Variables ---
     private bool ShowForm = false;
     private string FormTitle = string.Empty;
     private string FormDescription = string.Empty;
-    private DateTime FormDate = DateTime.Today; // Needed because Calendar can add for any day
+    private DateTime FormDate = DateTime.Today;
     private TimeOnly FormTime = TimeOnly.FromDateTime(DateTime.Now);
     private string FormTypeString = ReminderType.Other.ToString();
-    // ----------------------------------
+    private string FormPetIdString = string.Empty;
+    private string FormRecurrenceString = RecurrenceType.None.ToString();
+    private DateTime FormRecurrenceEndDate = DateTime.Today.AddMonths(1);
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadUserPetsAsync();
         await LoadUserRemindersAsync();
     }
 
-    private void PreviousMonth() => CurrentMonth = CurrentMonth.AddMonths(-1);
-    private void NextMonth() => CurrentMonth = CurrentMonth.AddMonths(1);
+    private async Task PreviousMonth()
+    {
+        CurrentMonth = CurrentMonth.AddMonths(-1);
+        await LoadUserRemindersAsync();
+    }
+
+    private async Task NextMonth()
+    {
+        CurrentMonth = CurrentMonth.AddMonths(1);
+        await LoadUserRemindersAsync();
+    }
 
     private void GoToDay(DateTime date)
     {
         var dayString = date.ToString("yyyy-MM-dd");
         NavigationManager.NavigateTo($"/dailyreminders/{dayString}");
+    }
+
+    private async Task LoadUserPetsAsync()
+    {
+        var email = AuthService.CurrentUser?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value
+                    ?? AuthService.CurrentUser?.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(email)) return;
+
+        var user = await Db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower());
+        if (user == null) return;
+
+        UserPets = await Db.Pets.AsNoTracking().Where(p => p.UserId == user.Id).ToListAsync();
     }
 
     private async Task LoadUserRemindersAsync()
@@ -137,7 +192,14 @@
         var user = await Db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower());
         if (user == null) return;
 
-        var reminders = await Db.Reminders.AsNoTracking().Where(r => r.UserId == user.Id).ToListAsync();
+        var startOfMonth = new DateTime(CurrentMonth.Year, CurrentMonth.Month, 1);
+        var endOfMonth = startOfMonth.AddMonths(1).AddDays(-1);
+
+        var reminders = await Db.Reminders
+            .Include(r => r.Pet) // Load the linked Pet object
+            .AsNoTracking()
+            .Where(r => r.UserId == user.Id && r.RemindAt >= startOfMonth && r.RemindAt <= endOfMonth.AddDays(1))
+            .ToListAsync();
 
         foreach (var r in reminders)
         {
@@ -147,27 +209,23 @@
         }
     }
 
-    // --- NEW: Form Logic ---
-
     private void OpenAddForm()
     {
-        // Reset form to defaults
         FormTitle = "";
         FormDescription = "";
         FormDate = DateTime.Today;
         FormTime = TimeOnly.FromDateTime(DateTime.Now);
         FormTypeString = ReminderType.Other.ToString();
+        FormPetIdString = "";
+        FormRecurrenceString = RecurrenceType.None.ToString();
+        FormRecurrenceEndDate = DateTime.Today.AddMonths(1);
         ShowForm = true;
     }
 
-    private void CancelForm()
-    {
-        ShowForm = false;
-    }
+    private void CancelForm() => ShowForm = false;
 
     private async Task SaveEvent()
     {
-        // 1. Get User
         var email = AuthService.CurrentUser?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value
                     ?? AuthService.CurrentUser?.Identity?.Name;
 
@@ -175,26 +233,47 @@
 
         var user = await Db.Users.FirstAsync(u => u.Email.ToLower() == email.ToLower());
 
-        // 2. Process Data
-        var fullDateTime = FormDate.Date + FormTime.ToTimeSpan();
         Enum.TryParse(FormTypeString, out ReminderType parsedType);
+        Enum.TryParse(FormRecurrenceString, out RecurrenceType parsedRecurrence);
 
-        // 3. Create Entity
-        var reminder = new Reminder
+        int? parsedPetId = string.IsNullOrEmpty(FormPetIdString) ? null : int.Parse(FormPetIdString);
+
+        var baseTime = FormTime.ToTimeSpan();
+        var currentDate = FormDate.Date;
+        var endDate = parsedRecurrence == RecurrenceType.None ? currentDate : FormRecurrenceEndDate.Date;
+
+        if (endDate > currentDate.AddYears(5)) endDate = currentDate.AddYears(5);
+
+        var seriesId = parsedRecurrence != RecurrenceType.None ? Guid.NewGuid() : (Guid?)null;
+        var remindersToInsert = new List<Reminder>();
+
+        while (currentDate <= endDate)
         {
-            UserId = user.Id,
-            Title = FormTitle,
-            Description = string.IsNullOrWhiteSpace(FormDescription) ? null : FormDescription,
-            RemindAt = fullDateTime,
-            Type = parsedType
-        };
+            remindersToInsert.Add(new Reminder
+            {
+                UserId = user.Id,
+                PetId = parsedPetId,
+                Title = FormTitle,
+                Description = string.IsNullOrWhiteSpace(FormDescription) ? null : FormDescription,
+                RemindAt = currentDate + baseTime,
+                Type = parsedType,
+                SeriesId = seriesId
+            });
 
-        // 4. Save to DB
-        Db.Reminders.Add(reminder);
+            currentDate = parsedRecurrence switch
+            {
+                RecurrenceType.Daily => currentDate.AddDays(1),
+                RecurrenceType.Weekly => currentDate.AddDays(7),
+                RecurrenceType.Monthly => currentDate.AddMonths(1),
+                RecurrenceType.Yearly => currentDate.AddYears(1),
+                _ => DateTime.MaxValue
+            };
+        }
+
+        Db.Reminders.AddRange(remindersToInsert);
         await Db.SaveChangesAsync();
 
-        // 5. Refresh Calendar & Close Form
-        await LoadUserRemindersAsync(); // Reloads the dots/text on the calendar grid
+        await LoadUserRemindersAsync();
         ShowForm = false;
     }
 }

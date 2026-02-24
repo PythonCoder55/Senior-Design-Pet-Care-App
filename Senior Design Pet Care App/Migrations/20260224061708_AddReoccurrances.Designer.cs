@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Senior_Design_Pet_Care_App.Data;
 
@@ -10,9 +11,11 @@ using Senior_Design_Pet_Care_App.Data;
 namespace SeniorDesignPetCareApp.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260224061708_AddReoccurrances")]
+    partial class AddReoccurrances
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
@@ -82,9 +85,6 @@ namespace SeniorDesignPetCareApp.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("TEXT");
 
-                    b.Property<int?>("PetId")
-                        .HasColumnType("INTEGER");
-
                     b.Property<DateTime>("RemindAt")
                         .HasColumnType("TEXT");
 
@@ -104,8 +104,6 @@ namespace SeniorDesignPetCareApp.Migrations
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("PetId");
 
                     b.ToTable("Reminders");
                 });
@@ -136,15 +134,6 @@ namespace SeniorDesignPetCareApp.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Users");
-                });
-
-            modelBuilder.Entity("Senior_Design_Pet_Care_App.Entities.Reminder", b =>
-                {
-                    b.HasOne("Senior_Design_Pet_Care_App.Entities.Pet", "Pet")
-                        .WithMany()
-                        .HasForeignKey("PetId");
-
-                    b.Navigation("Pet");
                 });
 #pragma warning restore 612, 618
         }
