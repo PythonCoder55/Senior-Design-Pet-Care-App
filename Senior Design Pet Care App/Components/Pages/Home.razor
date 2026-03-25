@@ -1,27 +1,272 @@
 ﻿@page "/"
 @using Senior_Design_Pet_Care_App.Services
+@using Senior_Design_Pet_Care_App.Data
+@using Senior_Design_Pet_Care_App.Entities
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
 @using System.Security.Claims
+@using System.Globalization
 
-<PageTitle>Home</PageTitle>
+@inject ApplicationDbContext Db
+@inject IAuthService AuthService
+@inject NavigationManager NavigationManager
 
-@* Example of using the AuthorizeView component to display different content based on the user's authentication status: *@
-<AuthorizeView>
-    <Authorized>
-        <h1>Hello @context.User.Identity.Name!</h1>
-        <p>Welcome to the Pet Care App. 
-           Here you will have the ability to log important reminders for things like feeding & medication times, vet appointments, scheduled walks & bathroom times, as well as important information and notes specific to your pet like their height, weight, age, breed, allergies, etc.
-            We also provide special tips & tricks and food & exercise recommendations for your pet based on their breed and age!
-        </p>
-    </Authorized>
-    <NotAuthorized>
-        <p>
-            Welcome to the Pet Care App.
-            Here you will have the ability to log important reminders for things like feeding & medication times, vet appointments, scheduled walks & bathroom times, as well as important information and notes specific to your pet like their height, weight, age, breed, allergies, etc.
-            We also provide special tips & tricks and food & exercise recommendations for your pet based on their breed and age!
-            Please log in below to view your calendar and pet information.
-        </p>
-        <Login/>
-    </NotAuthorized>
-</AuthorizeView>
+<PageTitle>Pet Care Companion</PageTitle>
 
+<div class="container pb-5">
+    @* --- HERO SECTION --- *@
+    <div class="p-5 mb-4 bg-light rounded-3 shadow-sm border-0 mt-3" style="background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);">
+        <div class="container-fluid py-3">
+            <h1 class="display-5 fw-bold text-primary">Pet Care Companion</h1>
+            <p class="col-md-8 fs-5 text-muted">
+                Your all-in-one platform for managing your pet's health, happiness, and daily needs.
+                Whether it's tracking vital health stats, setting recurring reminders for medications, or
+                getting AI-powered advice tailored to your pet's breed, we've got you covered.
+            </p>
+            <div class="d-flex gap-2">
+                <a href="/pets" class="btn btn-primary btn-lg px-4">Manage Pets</a>
+                <a href="/calendar" class="btn btn-outline-secondary btn-lg px-4">View Calendar</a>
+            </div>
+        </div>
+    </div>
+
+    @* --- FEATURES / HOW TO USE --- *@
+    <div class="row g-4 mb-5 text-center">
+        <div class="col-md-4">
+            <div class="card h-100 border-0 shadow-sm p-3 hover-lift">
+                <div class="card-body">
+                    <div class="h1 text-primary mb-3"><i class="bi bi-calendar-check"></i></div>
+                    <h5 class="card-title fw-bold">Never Miss a Beat</h5>
+                    <p class="card-text text-muted small">Schedule vet visits, grooming, and feeding times. Our recurring system handles the routine for you.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100 border-0 shadow-sm p-3 hover-lift">
+                <div class="card-body">
+                    <div class="h1 text-success mb-3"><i class="bi bi-heart-pulse"></i></div>
+                    <h5 class="card-title fw-bold">Health Tracking</h5>
+                    <p class="card-text text-muted small">Keep a history of weight, activity levels, and vaccinations in one secure place.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100 border-0 shadow-sm p-3 hover-lift">
+                <div class="card-body">
+                    <div class="h1 text-info mb-3"><i class="bi bi-robot"></i></div>
+                    <h5 class="card-title fw-bold">AI Pet Advice</h5>
+                    <p class="card-text text-muted small">Get specialized care recommendations based on your dog's specific breed and age profile.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* --- UNIFORM DOG GALLERY --- *@
+    <div class="mb-5">
+        <h3 class="mb-4 fw-bold">Our Happy Community</h3>
+        <div class="row g-3">
+            <div class="col-6 col-md-3">
+                <img src="https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&w=600&q=80" class="gallery-img rounded shadow-sm" alt="Beagle" />
+            </div>
+            <div class="col-6 col-md-3">
+                <img src="https://images.unsplash.com/photo-1517849845537-4d257902454a?auto=format&fit=crop&w=600&q=80" class="gallery-img rounded shadow-sm" alt="Pug" />
+            </div>
+            <div class="col-6 col-md-3">
+                <img src="https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?auto=format&fit=crop&w=600&q=80" class="gallery-img rounded shadow-sm" alt="Golden Retriever" />
+            </div>
+            <div class="col-6 col-md-3">
+                <img src="https://images.unsplash.com/photo-1537151608828-ea2b11777ee8?auto=format&fit=crop&w=600&q=80" class="gallery-img rounded shadow-sm" alt="Puppy" />
+            </div>
+        </div>
+    </div>
+
+    @* --- WEEKLY REMINDERS SECTION --- *@
+    <AuthorizeView>
+        <Authorized>
+            <div class="card border-0 shadow-sm overflow-hidden mb-5">
+                <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0 text-primary fw-bold"><i class="bi bi-calendar3 me-2"></i>Reminders at a Glance</h4>
+                    <span class="badge bg-primary rounded-pill px-3">This Week</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <div class="d-flex flex-nowrap bg-light border-top border-bottom">
+                            @foreach (var day in WeekDays)
+                            {
+                                var isToday = day.Date == DateTime.Today;
+                                <div class="flex-fill p-3 text-center border-end day-column" style="min-width: 150px; background: @(isToday ? "#f0f7ff" : "transparent")">
+                                    <div class="fw-bold @(isToday ? "text-primary" : "")">@day.ToString("ddd")</div>
+                                    <div class="small text-muted mb-2">@day.ToString("MMM dd")</div>
+
+                                    <div class="mt-2 text-start">
+                                        @if (WeeklyReminders.TryGetValue(day.Date, out var list))
+                                        {
+                                            @foreach (var r in list.OrderBy(x => x.RemindAt.TimeOfDay))
+                                            {
+                                                <div class="reminder-pill shadow-sm mb-2" @onclick="() => NavigateToDay(day)">
+                                                    <div class="time">@r.RemindAt.ToString("t")</div>
+                                                    <div class="title text-truncate">@r.Title</div>
+                                                </div>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <div class="text-muted small italic opacity-50 text-center py-3">No events</div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </Authorized>
+        <NotAuthorized>
+            <div class="alert alert-info text-center py-5 border-0 shadow-sm mb-5">
+                <h4 class="text-primary fw-bold">Ready to care for your pets?</h4>
+                <p class="mb-4 text-muted">Log in to manage your pets and see your upcoming weekly reminders.</p>
+                <div class="mx-auto" style="max-width: 400px;">
+                    <Login />
+                </div>
+            </div>
+        </NotAuthorized>
+    </AuthorizeView>
+</div>
+
+<style>
+    .gallery-img {
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        object-fit: cover;
+        transition: transform 0.3s ease;
+    }
+
+        .gallery-img:hover {
+            transform: scale(1.03);
+        }
+
+    .hover-lift {
+        transition: transform 0.2s ease, shadow 0.2s ease;
+    }
+
+        .hover-lift:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+        }
+
+    .reminder-pill {
+        background: white;
+        border-left: 4px solid #0d6efd;
+        padding: 6px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        transition: all 0.2s ease;
+    }
+
+        .reminder-pill:hover {
+            background: #f8f9fa;
+            transform: translateX(3px);
+            border-left-width: 6px;
+        }
+
+        .reminder-pill .time {
+            font-weight: bold;
+            color: #0d6efd;
+            font-size: 0.75rem;
+        }
+
+        .reminder-pill .title {
+            color: #333;
+        }
+
+    .day-column {
+        transition: background-color 0.3s ease;
+    }
+</style>
+
+@code {
+    // This allows the component to react when the user logs in
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private List<DateTime> WeekDays = new();
+    private Dictionary<DateTime, List<Reminder>> WeeklyReminders = new();
+    private string? LastLoadedEmail;
+
+    protected override void OnInitialized()
+    {
+        // Setup days once
+        DateTime today = DateTime.Today;
+        int diff = (7 + (today.DayOfWeek - DayOfWeek.Sunday)) % 7;
+        DateTime startOfWeek = today.AddDays(-1 * diff).Date;
+
+        for (int i = 0; i < 7; i++)
+        {
+            WeekDays.Add(startOfWeek.AddDays(i));
+        }
+    }
+
+    // This triggers whenever the cascading authentication state changes
+    protected override async Task OnParametersSetAsync()
+    {
+        if (AuthStateTask != null)
+        {
+            var authState = await AuthStateTask;
+            var user = authState.User;
+
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                var email = user.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value
+                            ?? user.Identity.Name;
+
+                // Only reload if the user has changed or data hasn't been loaded yet
+                if (email != LastLoadedEmail)
+                {
+                    await LoadWeeklyRemindersAsync(email);
+                }
+            }
+            else
+            {
+                WeeklyReminders.Clear();
+                LastLoadedEmail = null;
+            }
+        }
+    }
+
+    private async Task LoadWeeklyRemindersAsync(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email)) return;
+
+        var user = await Db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower());
+        if (user == null) return;
+
+        LastLoadedEmail = email;
+        WeeklyReminders.Clear();
+
+        var start = WeekDays.First();
+        var end = WeekDays.Last().AddDays(1);
+
+        var reminders = await Db.Reminders
+            .AsNoTracking()
+            .Where(r => r.UserId == user.Id && r.RemindAt >= start && r.RemindAt < end)
+            .ToListAsync();
+
+        foreach (var r in reminders)
+        {
+            var key = r.RemindAt.Date;
+            if (!WeeklyReminders.ContainsKey(key))
+            {
+                WeeklyReminders[key] = new List<Reminder>();
+            }
+            WeeklyReminders[key].Add(r);
+        }
+
+        StateHasChanged(); // Force UI update
+    }
+
+    private void NavigateToDay(DateTime date)
+    {
+        NavigationManager.NavigateTo($"/dailyreminders/{date:yyyy-MM-dd}");
+    }
+}

@@ -1,0 +1,250 @@
+@page "/facts"
+@using System.Net.Http.Json
+@using System.Text.Json.Serialization
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+
+<PageTitle>Pet Care Companion</PageTitle>
+
+<div class="container mt-4 mb-5">
+    <h3 class="mb-4 text-center">Random Dog Facts</h3>
+
+    @if (IsLoadingFacts)
+    {
+        <div class="text-center my-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading facts...</span>
+            </div>
+            <p class="mt-2 text-muted">Fetching today's dog fact...</p>
+        </div>
+    }
+    else
+    {
+        <div class="row mb-4 justify-content-center">
+            <div class="col-md-8">
+                <div class="card shadow-sm border-primary">
+                    <div class="card-header bg-primary text-white d-flex align-items-center">
+                        <i class="bi bi-info-circle-fill me-2"></i> Did You Know?
+                    </div>
+                    <div class="card-body text-center p-4">
+                        <p class="card-text fs-5 font-italic mb-0">"@RandomDogFact"</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="text-center mb-5">
+            <button class="btn btn-outline-secondary" @onclick="LoadRandomFacts">
+                ↻ Get Another Fact
+            </button>
+        </div>
+    }
+
+    <hr />
+
+    <h3 class="mt-5 mb-3">Dog Breed Search</h3>
+    <p class="text-muted mb-4">Search for specific dog breeds to learn about their history and traits via Wikipedia.</p>
+
+    <div class="input-group mb-4 shadow-sm">
+        <input type="text" class="form-control form-control-lg" placeholder="e.g., Beagle, Golden Retriever, Husky..." @bind="SearchQuery" @bind:event="oninput" @onkeyup="HandleKeyPress" />
+        <button class="btn btn-primary px-4" type="button" @onclick="SearchApi" disabled="@IsSearching">
+            @if (IsSearching)
+            {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                <span>Searching...</span>
+            }
+            else
+            {
+                <span>Search</span>
+            }
+        </button>
+    </div>
+
+    @if (HasSearched)
+    {
+        if (SearchResults.Count == 0 && !IsSearching)
+        {
+            <div class="alert alert-warning text-center shadow-sm">
+                No dog breeds found matching "<strong>@LastSearchQuery</strong>". Try checking your spelling or use a different search term!
+            </div>
+        }
+        else if (!IsSearching)
+        {
+            <h5 class="mb-3">Result for "@LastSearchQuery"</h5>
+            <div class="row">
+                @foreach (var result in SearchResults)
+                {
+                    <div class="col-12 mb-3">
+                        <div class="card shadow-sm">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h4 class="card-title text-primary mb-0">@result.Name</h4>
+                                    <div>
+                                        <span class="badge bg-success fs-6 me-2">Dog</span>
+                                        <span class="badge bg-secondary fs-6"><i class="bi bi-wikipedia"></i> Wikipedia</span>
+                                    </div>
+                                </div>
+
+                                @if (!string.IsNullOrEmpty(result.Description))
+                                {
+                                    <p class="card-text mt-3 pt-2 text-muted" style="line-height: 1.6;">@result.Description</p>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private static readonly HttpClient Http = new HttpClient();
+
+    // State for Random Facts
+    private bool IsLoadingFacts = true;
+    private string RandomDogFact = string.Empty;
+
+    // State for Searching
+    private string SearchQuery = string.Empty;
+    private string LastSearchQuery = string.Empty;
+    private bool IsSearching = false;
+    private bool HasSearched = false;
+    private List<PetSearchResult> SearchResults = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Http.DefaultRequestHeaders.Contains("User-Agent"))
+        {
+            Http.DefaultRequestHeaders.Add("User-Agent", "BlazorPetCareApp/1.0");
+        }
+
+        await LoadRandomFacts();
+    }
+
+    private async Task LoadRandomFacts()
+    {
+        IsLoadingFacts = true;
+        StateHasChanged();
+
+        try
+        {
+            var dogRes = await Http.GetFromJsonAsync<DogApiV2Response>("https://dogapi.dog/api/v2/facts");
+            RandomDogFact = dogRes?.Data?.FirstOrDefault()?.Attributes?.Body ?? "Dogs are loyal, but this API wasn't (failed to load).";
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching facts: {ex.Message}");
+            RandomDogFact = "Could not reach the Dog API. Please try again later.";
+        }
+        finally
+        {
+            IsLoadingFacts = false;
+        }
+    }
+
+    private async Task HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SearchApi();
+        }
+    }
+
+    private async Task SearchApi()
+    {
+        if (string.IsNullOrWhiteSpace(SearchQuery)) return;
+
+        IsSearching = true;
+        HasSearched = true;
+        LastSearchQuery = SearchQuery;
+        SearchResults.Clear();
+        StateHasChanged();
+
+        await FetchFromWikipedia(SearchQuery);
+
+        IsSearching = false;
+    }
+
+    // --- Wikipedia Search Logic ---
+    private async Task FetchFromWikipedia(string query)
+    {
+        // Format the query for Wikipedia URLs (e.g., "Golden Retriever" -> "golden_retriever")
+        var formatQuery = Uri.EscapeDataString(query.ToLower().Trim().Replace(" ", "_"));
+
+        // Try the direct query first (e.g. "Beagle")
+        bool success = await TryWikiQuery(formatQuery);
+
+        // If it failed or hit a disambiguation page, append "_dog" and try again (e.g. "husky_dog")
+        if (!success)
+        {
+            await TryWikiQuery(formatQuery + "_dog");
+        }
+    }
+
+    private async Task<bool> TryWikiQuery(string formattedQuery)
+    {
+        try
+        {
+            var wikiUrl = $"https://en.wikipedia.org/api/rest_v1/page/summary/{formattedQuery}";
+            var wikiRes = await Http.GetFromJsonAsync<WikiSummary>(wikiUrl);
+
+            // Ensure we got a valid article back, not a disambiguation page
+            if (wikiRes != null && wikiRes.Type != "disambiguation" && !string.IsNullOrWhiteSpace(wikiRes.Extract))
+            {
+                SearchResults.Add(new PetSearchResult
+                {
+                    Name = wikiRes.Title ?? "Unknown",
+                    Description = wikiRes.Extract
+                });
+                return true;
+            }
+        }
+        catch
+        {
+            // Wikipedia throws an exception (like 404 Not Found) if the page doesn't exist.
+            // We silently catch it here so it can attempt the fallback "_dog" query or return empty.
+        }
+        return false;
+    }
+
+    // --- Data Models for JSON Deserialization ---
+
+    // Models mapped for dogapi.dog/api/v2/facts
+    public class DogApiV2Response
+    {
+        [JsonPropertyName("data")]
+        public List<DogApiV2Data> Data { get; set; } = new();
+    }
+
+    public class DogApiV2Data
+    {
+        [JsonPropertyName("attributes")]
+        public DogApiV2Attributes Attributes { get; set; } = new();
+    }
+
+    public class DogApiV2Attributes
+    {
+        [JsonPropertyName("body")]
+        public string? Body { get; set; }
+    }
+
+    // Models mapped for Wikipedia API
+    public class WikiSummary
+    {
+        [JsonPropertyName("title")]
+        public string? Title { get; set; }
+
+        [JsonPropertyName("extract")]
+        public string? Extract { get; set; }
+
+        [JsonPropertyName("type")]
+        public string? Type { get; set; }
+    }
+
+    // Clean View Model used for the UI
+    public class PetSearchResult
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+    }
+}
