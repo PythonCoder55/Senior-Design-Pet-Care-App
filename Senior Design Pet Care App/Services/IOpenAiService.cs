@@ -1,4 +1,4 @@
-﻿// Services/IOpenAiService.cs
+﻿using System;
 using System.Threading.Tasks;
 
 namespace Senior_Design_Pet_Care_App.Services
