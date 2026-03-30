@@ -36,7 +36,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 );
 
 // register OpenAI HttpClient + service
-builder.Services.AddHttpClient<IOpenAiService, OpenAiService>();
+builder.Services.AddScoped<IOpenAiService, OpenAiService>();
 
 // Register AuthDataService (now async)
 builder.Services.AddScoped<IAuthDataService, AuthDataService>();
