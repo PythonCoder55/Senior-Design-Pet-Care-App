@@ -5,6 +5,7 @@
 
 <PageTitle>Home</PageTitle>
 
+
 @* Example of using the AuthorizeView component to display different content based on the user's authentication status: *@
 <AuthorizeView>
     <Authorized>
@@ -21,7 +22,9 @@
             We also provide special tips & tricks and food & exercise recommendations for your pet based on their breed and age!
             Please log in below to view your calendar and pet information.
         </p>
-        <Login/>
+        @*<Login/>
+            This was originally on the home page but I'm moving it to its own login screen'
+        *@
     </NotAuthorized>
 </AuthorizeView>
 

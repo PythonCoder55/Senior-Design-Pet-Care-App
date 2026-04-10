@@ -1,7 +1,21 @@
 ﻿@page "/login"
+@using Senior_Design_Pet_Care_App.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+
+<AuthorizeView>
+    <Authorized>
+        <p>Welcome @context.User.Identity.Name</p>
+    </Authorized>
+
+    <NotAuthorized>
+
+    </NotAuthorized>
+</AuthorizeView>
+
 
 <div class="text-center w-100 m-2 text-black-50">
-    <h2>Pet Care Login</h2>
+    <h2>Please Log in or Create an Account</h2>
 </div>
 
 <div class="card">
@@ -11,7 +25,7 @@
             <DataAnnotationsValidator />
 
             <div class="form-group">
-                <label for="email">User Name</label>
+                <label for="email">Email Address</label>
                 <InputText Id="email" @ref="@inputTextFocus" class="form-control" @bind-Value="loginModel.Email" />
                 <ValidationMessage For="@(() => loginModel.Email)" />
             </div>

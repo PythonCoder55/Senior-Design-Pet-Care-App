@@ -4,18 +4,29 @@
 @inherits LayoutComponentBase
 
 <div class="page">
-    <div class="sidebar">
+    @*<div class="sidebar">
         <NavMenu />
+    </div>*@
+
+    <div class="banner">
+        <p>Pet Care Companion</p>
+    </div>
+
+    <div class="newNav">
+        <NewNavMenu />
     </div>
 
     <main>
+        
         @* Example of using the AuthorizeView component to display different content based on the user's authentication status: *@
         <AuthorizeView>
             <Authorized>
+                @*Removed from every page although it might be added to other pages? idk yet
                 <div class="top-row px-4">
                     <p>@context.User.Identity.Name</p>
                     <button type="submit" class="btn btn-primary" id="logout" @onclick="Logout">Logout</button>
-                </div>
+                </div> 
+                *@
             </Authorized>
         </AuthorizeView>
         @* <div class="top-row px-4">

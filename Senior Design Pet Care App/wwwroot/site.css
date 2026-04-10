@@ -66,3 +66,35 @@
 #logout {
     margin-left: 20px;
 }
+
+.page{
+    display:flex;
+    flex-direction:column;
+    margin-left:300px;
+    margin-right:300px;
+}
+
+.banner {
+    width:100%;
+    height:5rem;
+    font-family:Centaur;
+    font-size: 3rem;
+    padding-left:.5rem;
+    background-color: #119186;
+    border-style:solid;
+    border-color:black;
+    margin-bottom:0rem;
+    opacity:75%;
+}
+
+.newNav {
+    margin-top:0rem;
+}
+
+main{
+    flex:3;
+}
+
+body{
+    background-image:url('BackgroundImageTest_1.jpg');
+}
