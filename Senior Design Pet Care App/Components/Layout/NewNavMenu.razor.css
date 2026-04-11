@@ -3,18 +3,22 @@
     flex-direction:row-reverse;
 }
 
-a{
-    background-color:white;
-    color:black;
-    text-decoration:none;
+
+.navElement {
+    background-color: #bcf6f3;
+    color: black;
+    text-decoration: none;
+    padding: .25rem 1.25rem;
+    border: .125rem solid black;
+    display: inline-block;
+    transition: border-radius .5s ease, transform .5s ease, background-color .5s ease, color .5s ease;
+    will-change: transform, border-width;
 }
 
-a:hover{
-    color:white;
-    background-color:#9E9E9E;
-}
-
-.navElement{
-    padding:.25rem 1.25rem;
-    border:.125rem solid black;
-}
+    .navElement:hover,
+    .navElement:focus {
+        color: white;
+        background-color: #0b5b55;
+        border-radius: 12px;
+        text-decoration: none;
+    }
