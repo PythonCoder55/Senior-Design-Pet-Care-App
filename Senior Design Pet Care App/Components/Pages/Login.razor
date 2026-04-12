@@ -1,19 +1,20 @@
-﻿@page "/login"
+@page "/login"
 
 <PageTitle>Pet Care Companion</PageTitle>
 
-<div class="text-center w-100 m-2 text-black-50">
-    <h2>Pet Care Login</h2>
-</div>
+<div class="login-page">
+    <div class="login-card">
+        <div class="login-header">
+            <span class="login-icon">&#128062;</span>
+            <h2>Pet Care Companion</h2>
+            <p class="login-subtitle">Sign in to your account</p>
+        </div>
 
-<div class="card">
-    <div class="card-body">
-        <h5 class="card-title">Please enter your login details</h5>
         <EditForm Model="loginModel" OnValidSubmit="HandleLogin">
             <DataAnnotationsValidator />
 
             <div class="form-group">
-                <label for="email">User Name</label>
+                <label for="email">Username</label>
                 <InputText Id="email" @ref="@inputTextFocus" class="form-control" @bind-Value="loginModel.Email" />
                 <ValidationMessage For="@(() => loginModel.Email)" />
             </div>
@@ -22,16 +23,17 @@
                 <InputText Id="password" type="@passwordType" class="form-control" @bind-Value="loginModel.Password" />
                 <ValidationMessage For="@(() => loginModel.Password)" />
             </div>
-            <div class="form-group">
+            <div class="show-password-row">
                 <input id="showPassword" type="checkbox" checked="@showPassword" @oninput="@HandlePassword" />
                 <label for="showPassword">Show Password</label>
             </div>
-            <h6 class="warning login-error text-center" style="display: @DisplayError">@errorMessage</h6>
-            <div class="w-100 text-center">
-                <button type="submit" class="btn btn-primary">Log In</button>
-            </div>
-            <div class="w-100 text-center mt-2">
-                <a href="/signup">Don't have an account? Sign up</a>
+
+            <h6 class="error-message" style="display: @DisplayError">@errorMessage</h6>
+
+            <button type="submit" class="btn-login">Log In</button>
+
+            <div class="signup-link">
+                <a href="/signup">Don't have an account? <strong>Sign up</strong></a>
             </div>
         </EditForm>
     </div>

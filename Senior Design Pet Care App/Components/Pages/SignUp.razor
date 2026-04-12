@@ -1,14 +1,14 @@
-﻿@page "/signup"
+@page "/signup"
 
 <PageTitle>Pet Care Companion</PageTitle>
 
-<div class="text-center w-100 m-2 text-black-50">
-    <h2>Create an account</h2>
-</div>
-
-<div class="card">
-    <div class="card-body">
-        <h5 class="card-title">Sign Up</h5>
+<div class="signup-page">
+    <div class="signup-card">
+        <div class="signup-header">
+            <span class="signup-icon">&#128062;</span>
+            <h2>Create an Account</h2>
+            <p class="signup-subtitle">Join Pet Care Companion</p>
+        </div>
 
         <EditForm Model="signUpModel" OnValidSubmit="HandleSignUp">
             <DataAnnotationsValidator />
@@ -31,10 +31,12 @@
                 <ValidationMessage For="@(() => signUpModel.ConfirmPassword)" />
             </div>
 
-            <h6 class="warning text-center" style="display:@DisplayMessage">@Message</h6>
+            <h6 class="error-message" style="display:@DisplayMessage">@Message</h6>
 
-            <div class="w-100 text-center">
-                <button type="submit" class="btn btn-primary">Create Account</button>
+            <button type="submit" class="btn-signup">Create Account</button>
+
+            <div class="login-link">
+                <a href="/login">Already have an account? <strong>Log in</strong></a>
             </div>
         </EditForm>
     </div>
