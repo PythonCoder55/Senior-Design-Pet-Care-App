@@ -1,5 +1,6 @@
 ﻿@using Senior_Design_Pet_Care_App.Services
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.JSInterop
 @using System.Security.Claims
 @inherits LayoutComponentBase
 
@@ -40,14 +41,17 @@
 @code {
     [Inject] private IAuthService AuthService { get; set; }
     [Inject] private NavigationManager NavigationManager { get; set; }
+    [Inject] private IJSRuntime JS { get; set; }
+
+    private bool signingOut;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         // A hard refresh or the user just navigated to the application for the first time
-        if (firstRender && !AuthService.IsLoggedIn)
+        if (firstRender && !AuthService.IsLoggedIn && !signingOut)
         {
             var url = NavigationManager.ToAbsoluteUri(NavigationManager.Uri).ToString();
-            if (url.Contains("/login"))
+            if (url.Contains("/login") || url.Contains("/logout"))
             {
                 return;
             }
@@ -63,12 +67,26 @@
 
     private async Task Logout()
     {
-        if (AuthService.IsLoggedIn)
+        // Latch so any subsequent OnAfterRenderAsync on this circuit can't
+        // re-authenticate from a not-yet-cleared sessionStorage token.
+        signingOut = true;
+
+        // Clear Blazor server-side state immediately.
+        AuthService.CurrentUser = new();
+
+        try
         {
-            await AuthService.LogoutAsync();
+            // Single atomic JS call: wipes the JWT from browser storage AND
+            // hard-navigates to "/". Keeping both steps inside one JS execution
+            // avoids the Azure SignalR ordering bug where the clear could finish
+            // after the navigate, leaving a stale token behind.
+            await JS.InvokeVoidAsync("petCareSignOut");
         }
-        // forceLoad tears down the circuit so the embedded Login component
-        // can't re-run GetStateFromTokenAsync against a stale sessionStorage value
-        NavigationManager.NavigateTo("/", forceLoad: true);
+        catch
+        {
+            // Fallback: best-effort C#-side clear + forceLoad navigate.
+            try { await AuthService.LogoutAsync(); } catch { }
+            NavigationManager.NavigateTo("/", forceLoad: true);
+        }
     }
 }

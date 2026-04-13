@@ -16,6 +16,17 @@
 <body>
     <Routes @rendermode="RenderMode.InteractiveServer" />
     <script src="_framework/blazor.web.js"></script>
+    <script>
+        // Atomic sign-out: clear the JWT from browser storage AND hard-navigate
+        // to home in a single JS execution. Kept in one call so the Azure
+        // SignalR/JS-interop pipeline can't reorder the clear after the navigate,
+        // which was leaving a stale token that the circuit then restored.
+        window.petCareSignOut = function () {
+            try { sessionStorage.removeItem('auth_token'); } catch (e) { }
+            try { localStorage.removeItem('auth_token'); } catch (e) { }
+            window.location.replace('/');
+        };
+    </script>
 </body>
 
 </html>

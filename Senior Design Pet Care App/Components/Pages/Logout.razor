@@ -1,23 +1,28 @@
 ﻿@page "/logout"
 @using Senior_Design_Pet_Care_App.Services
+@using Microsoft.JSInterop
 
 <PageTitle>Pet Care Companion</PageTitle>
 
 @code {
     [Inject] private NavigationManager NavigationManager { get; set; }
     [Inject] private IAuthService AuthService { get; set; }
+    [Inject] private IJSRuntime JS { get; set; }
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (AuthService.IsLoggedIn)
+        if (!firstRender) return;
+
+        AuthService.CurrentUser = new();
+
+        try
         {
-            await AuthService.LogoutAsync();
-            NavigationManager.NavigateTo("/auth");
+            await JS.InvokeVoidAsync("petCareSignOut");
         }
-        else
+        catch
         {
-            NavigationManager.NavigateTo("/auth");
+            try { await AuthService.LogoutAsync(); } catch { }
+            NavigationManager.NavigateTo("/", forceLoad: true);
         }
     }
-     
 }
