@@ -42,12 +42,23 @@ namespace Senior_Design_Pet_Care_App.Services
             //Update the Blazor Server State for the user to an anonymous user
             CurrentUser = new();
 
-            //Remove the JWT from the browser session
-            string authToken = await _sessionService.GetItemAsStringAsync(AuthTokenName);
-
-            if (!string.IsNullOrEmpty(authToken))
+            //Aggressively clear the JWT from the browser session.
+            //On Azure the SignalR/JS-interop ordering can let a stale token survive
+            //a single RemoveItemAsync, so overwrite, remove, then verify-and-retry.
+            try
             {
+                await _sessionService.SetItemAsStringAsync(AuthTokenName, string.Empty);
                 await _sessionService.RemoveItemAsync(AuthTokenName);
+
+                var stillThere = await _sessionService.GetItemAsStringAsync(AuthTokenName);
+                if (!string.IsNullOrEmpty(stillThere))
+                {
+                    await _sessionService.RemoveItemAsync(AuthTokenName);
+                }
+            }
+            catch
+            {
+                // Best effort — server-side state is already cleared above
             }
         }
 

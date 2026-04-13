@@ -66,11 +66,9 @@
         if (AuthService.IsLoggedIn)
         {
             await AuthService.LogoutAsync();
-            NavigationManager.NavigateTo("/");
         }
-        else
-        {
-            NavigationManager.NavigateTo("/");
-        }
+        // forceLoad tears down the circuit so the embedded Login component
+        // can't re-run GetStateFromTokenAsync against a stale sessionStorage value
+        NavigationManager.NavigateTo("/", forceLoad: true);
     }
 }
