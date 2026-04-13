@@ -11,6 +11,8 @@ namespace Senior_Design_Pet_Care_App.Components.Pages
         [Inject] private IAuthService AuthService { get; set; }
         [Inject] private IAuthDataService AuthDataService { get; set; }
 
+        [Parameter] public bool Embedded { get; set; }
+
         protected SignInModel loginModel = new();
 
         protected string DisplayError { get; set; } = "none;";
