@@ -9,7 +9,7 @@ namespace Senior_Design_Pet_Care_App.Entities
         public string Email { get; set; } = string.Empty;
 
         [Required]
-        [MinLength(6, ErrorMessage = "Password must be at least 6 characters")]
+        [RegularExpression("^(?=.{10,}$)(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*()_+\\-=[\\]{};:'\",.<>/?|\\\\]).+$", ErrorMessage = "Password must be at least 10 characters and contain an uppercase letter, a number, and a special character.")]
         public string Password { get; set; } = string.Empty;
 
         [Required]
